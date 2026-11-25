@@ -54,11 +54,12 @@ class PastProject(BaseModel):
 
 
 class CompanyProfile(BaseModel):
+    is_sample: bool = False  # 기본 제공 가상 회사 정보 여부(저장 시 False)
     name: str = ""
     ceo: str = ""
     biz_reg_no: str = ""
-    social_type: str = "예비사회적기업(일자리 제공형)"
-    is_certified_social: bool = True
+    social_type: str = ""
+    is_certified_social: bool = False
     vulnerable_employment_ratio: float = 30.0
     is_women_owned: bool = False
     is_disabled_owned: bool = False

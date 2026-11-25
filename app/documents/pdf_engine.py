@@ -10,6 +10,7 @@ from typing import Callable
 import pdfplumber
 import pypdfium2 as pdfium
 
+from app.documents.errors import DocumentParseError
 from app.schemas.docs import ParsedDocument
 
 logger = logging.getLogger(__name__)
@@ -28,14 +29,21 @@ def parse_pdf(
     """
     path = Path(file_path)
     if path.suffix.lower() != ".pdf":
-        raise ValueError(f"PDF 파일이 아닙니다: {path.suffix}")
+        raise DocumentParseError(f"PDF 파일이 아닙니다: {path.suffix}")
 
     pages_text: list[str] = []
     outline_items: list[dict[str, str]] = []
     page_count = 1
 
     # 1. pypdfium2 고속 텍스트 및 TOC 추출
-    pdf = pdfium.PdfDocument(str(path))
+    if not path.exists():
+        raise FileNotFoundError(f"파일을 찾을 수 없습니다: {path}")
+    try:
+        pdf = pdfium.PdfDocument(str(path))
+    except Exception as exc:
+        raise DocumentParseError(
+            f"PDF를 열 수 없습니다({path.name}). 손상되었거나 암호가 걸린 파일입니다: {exc}"
+        ) from exc
     try:
         page_count = max(1, len(pdf))
         try:

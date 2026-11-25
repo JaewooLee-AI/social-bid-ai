@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from app.collectors.base import safe_path_component
 from app.config import get_downloads_dir
 from app.documents.hwpx_engine import create_sample_hwpx_template
 
@@ -234,7 +235,7 @@ def _demo_bid_items() -> list[dict[str, Any]]:
 
 def materialize_demo_attachments(bid_no: str, attachments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """데모 공고 승인 시 온디맨드로 실제 유효한 .hwpx 파일을 downloads/<bid_no>/에 생성한다."""
-    target_dir = get_downloads_dir() / bid_no
+    target_dir = get_downloads_dir() / safe_path_component(bid_no, fallback="demo_notice")
     target_dir.mkdir(parents=True, exist_ok=True)
     out: list[dict[str, Any]] = []
     if not attachments:

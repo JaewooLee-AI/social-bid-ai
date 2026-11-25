@@ -68,6 +68,7 @@ class DashboardSummary(BaseModel):
     priority_purchase_120: bool
     simulation_mode: bool
     vec_available: bool
+    profile_is_sample: bool = False
     quotas: list[QuotaStatus] = Field(default_factory=list)
     urgent_bids: list[UrgentBidItem] = Field(default_factory=list)
     recent_works: list[RecentWorkItem] = Field(default_factory=list)

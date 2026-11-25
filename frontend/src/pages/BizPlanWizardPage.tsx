@@ -336,7 +336,8 @@ export const BizPlanWizardPage: React.FC<BizPlanWizardPageProps> = ({
     try {
       const res = await api.exportBizPlan(active.id, fmt, customPath);
       setLastExportPath(res.output_path);
-      onNotify(`${fmt.toUpperCase()} 저장 완료 [${res.mode}]: ${res.output_path}`);
+      const warnMsg = res.warnings.length > 0 ? ` (${res.warnings.join(' / ')})` : '';
+      onNotify(`${fmt.toUpperCase()} 저장 완료 [${res.mode}]: ${res.output_path}${warnMsg}`);
     } catch (e) {
       onNotify(`내보내기 실패: ${(e as Error).message}`);
     }

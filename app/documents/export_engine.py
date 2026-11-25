@@ -7,7 +7,28 @@ from pathlib import Path
 from typing import Any
 
 from docx import Document
+from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
+
+_KOREAN_FONT = "Malgun Gothic"
+_MD_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+_MD_NUMBERED_RE = re.compile(r"^\d+[.)]\s+")
+
+
+def _set_korean_font(style: Any, name: str = _KOREAN_FONT) -> None:
+    """font.name은 라틴 글꼴만 바꾸므로 한글(eastAsia) 글꼴도 명시한다. 없으면 Word가 MS Mincho 등으로 대체."""
+    style.font.name = name
+    rpr = style.element.get_or_add_rPr()
+    rfonts = rpr.find(qn("w:rFonts"))
+    if rfonts is None:
+        rfonts = rpr.makeelement(qn("w:rFonts"), {})
+        rpr.append(rfonts)
+    for attr in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
+        rfonts.set(qn(attr), name)
+    # 테마 글꼴 지정이 있으면 eastAsia 지정보다 우선하므로 제거
+    for attr in ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme"):
+        if rfonts.get(qn(attr)) is not None:
+            del rfonts.attrib[qn(attr)]
 
 
 def _clean_md_inline(text: str) -> str:
@@ -43,8 +64,13 @@ def export_docx(
 
     doc = Document()
     normal_style = doc.styles["Normal"]
-    normal_style.font.name = "Malgun Gothic"
+    _set_korean_font(normal_style)
     normal_style.font.size = Pt(10.5)
+    for style_name in ["Title", *[f"Heading {n}" for n in range(1, 7)], "List Bullet", "List Number"]:
+        try:
+            _set_korean_font(doc.styles[style_name])
+        except KeyError:
+            pass
 
     title_p = doc.add_heading(title, level=0)
     for run in title_p.runs:
@@ -85,14 +111,17 @@ def export_docx(
                             table.cell(r_i, c_i).text = row[c_i] if c_i < len(row) else ""
                 continue
 
-            if raw.startswith("### "):
-                doc.add_heading(_clean_md_inline(raw[4:]), level=3)
-            elif raw.startswith("## "):
-                doc.add_heading(_clean_md_inline(raw[3:]), level=2)
-            elif raw.startswith("# "):
-                doc.add_heading(_clean_md_inline(raw[2:]), level=2)
-            elif raw.startswith("- ") or raw.startswith("* "):
+            heading = _MD_HEADING_RE.match(raw)
+            if heading:
+                # 섹션 제목이 Heading 1이므로 본문 '#'·'##'은 2단계부터, 최대 6단계
+                level = min(6, max(2, len(heading.group(1))))
+                doc.add_heading(_clean_md_inline(heading.group(2)), level=level)
+            elif raw.startswith(("- ", "* ", "• ")):
                 doc.add_paragraph(_clean_md_inline(raw[2:]), style="List Bullet")
+            elif raw.startswith(">"):
+                q = doc.add_paragraph(_clean_md_inline(raw.lstrip("> ")))
+                for run in q.runs:
+                    run.italic = True
             else:
                 doc.add_paragraph(_clean_md_inline(raw))
             i += 1

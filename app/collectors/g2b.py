@@ -10,7 +10,11 @@ from typing import Any
 import httpx
 
 from app.collectors.base import (
+    QuotaExceededError,
     chunk_date_range,
+    download_to_file,
+    safe_int_amount,
+    safe_path_component,
     normalize_service_key,
     remaining_quota,
     request_with_backoff,
@@ -59,11 +63,7 @@ def _parse_g2b_items(payload: dict[str, Any], category: str) -> list[dict[str, A
         if not bid_no:
             continue
         bid_ord = str(it.get("bidNtceOrd") or "00").zfill(2)
-        price_raw = it.get("presmptPrce") or it.get("asignBdgtAmt") or 0
-        try:
-            est_price = int(float(str(price_raw).replace(",", "")))
-        except Exception:
-            est_price = 0
+        est_price = safe_int_amount(it.get("presmptPrce") or it.get("asignBdgtAmt"))
 
         results.append(
             {
@@ -200,7 +200,13 @@ async def fetch_g2b_bids(
                     }
                     if keyword.strip():
                         params["bidNtceNm"] = keyword.strip()
-                    resp = await request_with_backoff(client, f"{base_url}/{op}", params, source="g2b")
+                    try:
+                        resp = await request_with_backoff(client, f"{base_url}/{op}", params, source="g2b")
+                    except QuotaExceededError:
+                        if not collected:
+                            raise
+                        stopped_by_quota = True  # 이미 받은 공고는 살리고 한도 도달을 보고
+                        break
                     data = resp.json()
                     err_code, err_msg = _extract_g2b_error(data)
                     if err_code == "03":
@@ -256,7 +262,7 @@ async def download_g2b_attachments(bid_no: str, bid_ord: str, existing_attachmen
     cfg = load_config()["public_api"]
     key = normalize_service_key(cfg.get("g2b_service_key", ""))
     base_url = str(cfg.get("g2b_base_url") or "https://apis.data.go.kr/1230000/ad/BidPublicInfoService02").rstrip("/")
-    target_dir = get_downloads_dir() / bid_no
+    target_dir = get_downloads_dir() / safe_path_component(bid_no, fallback="g2b_notice")
     target_dir.mkdir(parents=True, exist_ok=True)
 
     attachments = list(existing_attachments)
@@ -293,19 +299,17 @@ async def download_g2b_attachments(bid_no: str, bid_ord: str, existing_attachmen
     async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
         for att in attachments:
             url = str(att.get("url") or "")
-            fname = Path(str(att.get("filename") or "attachment.bin")).name
+            fname = safe_path_component(att.get("filename"), fallback="attachment.bin")
             local_path = target_dir / fname
             if url.startswith("http"):
                 try:
-                    r = await client.get(url)
-                    r.raise_for_status()
-                    local_path.write_bytes(r.content)
+                    size = await download_to_file(client, url, local_path)
                     downloaded.append(
                         {
                             "filename": fname,
                             "url": url,
                             "local_path": str(local_path),
-                            "size_bytes": len(r.content),
+                            "size_bytes": size,
                             "file_type": local_path.suffix.lower().lstrip("."),
                         }
                     )

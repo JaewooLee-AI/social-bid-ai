@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.collectors.region import extract_region_limit_from_text, is_nationwide, region_matches
 from app.schemas.bids import GoNoGoItem, RfpAnalysis
 from app.schemas.docs import OutlineNode, ParsedDocument, ScoringCriterion
 
@@ -174,7 +175,14 @@ def build_rfp_summary_and_gonogo(
     text = doc.full_text
     bid_meta = bid_meta or {}
     est_price = int(bid_meta.get("estimated_price") or 0)
-    region_limit = str(bid_meta.get("region_limit") or "전국")
+    region_limit = str(bid_meta.get("region_limit") or "").strip()
+    region_from_text = False
+    if not region_limit or is_nationwide(region_limit):
+        # 업로드 RFP는 공고 메타가 없으므로 참가자격 문장에서 지역 제한을 찾는다
+        extracted = extract_region_limit_from_text(text)
+        if extracted and not region_limit:
+            region_limit, region_from_text = extracted, True
+    region_limit = region_limit or "전국"
     is_sme = bool(bid_meta.get("is_sme_competing") or ("중소기업자간 경쟁제품" in text))
 
     go_nogo: list[GoNoGoItem] = []
@@ -208,14 +216,24 @@ def build_rfp_summary_and_gonogo(
     # 3. 지역제한 확인
     comp_region = str(profile.get("region") or "")
     include_nationwide = bool(profile.get("include_nationwide", True))
-    region_ok = (region_limit in ("전국", "")) or (comp_region and comp_region[:2] in region_limit)
+    region_ok = region_matches(comp_region, region_limit)
+    if region_ok is True:
+        region_status, region_note = "pass", ""
+    elif region_ok is False:
+        region_status, region_note = "warn", "본사 소재지가 공고 지역 제한과 다릅니다."
+    else:
+        region_status, region_note = "check", "본사 소재지 또는 공고 지역을 시·도로 해석하지 못했습니다. 직접 확인하세요."
+    if region_from_text:
+        region_note = (region_note + " " if region_note else "") + "RFP 본문 참가자격 문장에서 추출한 지역입니다(원문 확인 필요)."
+        if region_status == "pass":
+            region_status = "check"
     go_nogo.append(
         GoNoGoItem(
             criterion="참가 가능 지역 제한",
-            required_value=region_limit or "전국",
+            required_value=region_limit,
             company_value=f"{comp_region} ({'전국 포함' if include_nationwide else '지역 한정'})",
-            status="pass" if region_ok else "warn",
-            note="" if region_ok else "본사 소재지가 공고 지역 제한과 다릅니다.",
+            status=region_status,
+            note=region_note,
         )
     )
 

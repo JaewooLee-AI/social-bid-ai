@@ -25,6 +25,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   return (
     <div className="space-y-5">
+      {summary?.profile_is_sample && (
+        <div
+          role="note"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-900"
+        >
+          <span>
+            <strong className="font-semibold">샘플 회사 정보 사용 중</strong> — 기본 제공된 가상 회사((주)함께자람) 정보로
+            제안서·사업계획서가 작성됩니다. 실제 회사 정보로 바꿔 저장하세요.
+          </span>
+          <button
+            type="button"
+            onClick={() => onNavigate('settings')}
+            className="px-2.5 py-1 rounded-md bg-amber-600 text-white font-semibold hover:bg-amber-700"
+          >
+            회사 프로필 수정
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-[#0F2942]">대시보드 & 인사이트</h1>

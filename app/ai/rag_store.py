@@ -12,6 +12,7 @@ from typing import Any
 from app.ai.llm_client import embed_texts, estimate_tokens
 from app.config import effective_embedding_space, load_profile
 from app.db import get_conn, is_vec_available
+from app.documents.errors import DocumentParseError
 from app.documents.hwpx_engine import parse_hwpx_or_hwp
 from app.documents.pdf_engine import parse_pdf
 from app.schemas.rag import RagDocumentInfo, RagSearchHit, RagStatus
@@ -232,7 +233,7 @@ def ingest_file(
     elif ext in {".txt", ".md", ".json", ".yaml", ".yml", ".csv"}:
         text = path.read_text(encoding="utf-8", errors="replace")
     else:
-        raise ValueError(f"RAG 인덱싱 미지원 포맷입니다: {ext}")
+        raise DocumentParseError(f"RAG 인덱싱 미지원 포맷입니다: {ext}")
 
     return ingest_text_document(
         title=title or path.name,

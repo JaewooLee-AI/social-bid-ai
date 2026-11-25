@@ -122,10 +122,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 
 DEFAULT_PROFILE: dict[str, Any] = {
+    # 시연용 가상 회사. 사용자가 프로필을 한 번이라도 저장하면 is_sample=False가 되고,
+    # 그 전까지는 화면·내보내기에 "샘플 회사 정보" 경고를 표시한다.
+    "is_sample": True,
     "name": "(주)함께자람 사회적협동조합",
     "ceo": "김나눔",
     "biz_reg_no": "123-82-00456",
-    "social_type": "예비사회적기업(일자리 제공형)",
+    # 인증 사회적기업(certifications에도 인증 보유). 예전엔 '예비사회적기업'인데 is_certified_social=True로 모순
+    "social_type": "인증 사회적기업(일자리 제공형)",
     "is_certified_social": True,
     "vulnerable_employment_ratio": 38.5,
     "is_women_owned": False,
@@ -267,6 +271,11 @@ def save_config(cfg: dict[str, Any]) -> dict[str, Any]:
 def load_profile() -> dict[str, Any]:
     seed_defaults()
     raw = json.loads(get_profile_path().read_text(encoding="utf-8"))
+    if "is_sample" not in raw:
+        # 구버전 프로필 파일: 샘플 회사의 이름·사업자번호를 그대로 쓰는 경우에만 샘플로 간주
+        raw["is_sample"] = (
+            raw.get("name") == DEFAULT_PROFILE["name"] and raw.get("biz_reg_no") == DEFAULT_PROFILE["biz_reg_no"]
+        )
     return _deep_merge(DEFAULT_PROFILE, raw)
 
 

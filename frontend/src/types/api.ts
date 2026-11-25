@@ -62,6 +62,7 @@ export interface DashboardSummary {
   priority_purchase_120: boolean;
   simulation_mode: boolean;
   vec_available: boolean;
+  profile_is_sample?: boolean;
   quotas: QuotaStatus[];
   urgent_bids: UrgentBidItem[];
   recent_works: RecentWorkItem[];
@@ -232,6 +233,7 @@ export interface PastProject {
 }
 
 export interface CompanyProfile {
+  is_sample: boolean;
   name: string;
   ceo: string;
   biz_reg_no: string;

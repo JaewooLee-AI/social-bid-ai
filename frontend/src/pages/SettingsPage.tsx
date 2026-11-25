@@ -573,6 +573,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNotify, onConfigUp
         <div className="lg:col-span-9 bg-white border border-slate-200 rounded-xl p-5">
           {tab === 'profile' && profile && (
             <form onSubmit={handleSaveProfile} className="space-y-4">
+              {profile.is_sample && (
+                <p role="note" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  지금 값은 시연용 <strong>가상 회사</strong> 정보입니다. 회사명·사업자번호·인증 여부·실적을 실제 값으로 바꾼 뒤
+                  저장하세요. 저장 전까지 공고 판정과 내보낸 문서에 샘플 경고가 붙습니다.
+                </p>
+              )}
               <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                 <h2 className="text-sm font-bold text-[#0F2942]">우리 회사 마스터 프로필 (공고 필터 · RAG 기준 데이터)</h2>
                 <button

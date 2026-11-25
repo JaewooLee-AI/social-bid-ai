@@ -116,7 +116,8 @@ def get_company_profile() -> CompanyProfile:
 
 @router.put("/settings/profile", response_model=CompanyProfile)
 def update_company_profile(profile: CompanyProfile) -> CompanyProfile:
-    saved = save_profile(profile.model_dump())
+    # 사용자가 직접 저장한 프로필은 더 이상 샘플이 아님
+    saved = save_profile({**profile.model_dump(), "is_sample": False})
     # 마스터 프로필 변경 시 로컬 RAG 자동 동기화
     _sync_profile_rag_safely(saved)
     return CompanyProfile(**saved)

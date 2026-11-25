@@ -27,7 +27,8 @@ hiddenimports = [
 ]
 
 # 핵심 로컬 라이브러리 전체 수집 (sqlite-vec vec0.dll/dylib 포함)
-for pkg in ("sqlite_vec", "hwpx", "pdfplumber", "pypdfium2"):
+# google.genai는 llm_client에서 함수 안 지연 import라 정적 분석으로 잡히지 않으므로 명시 수집
+for pkg in ("sqlite_vec", "hwpx", "pdfplumber", "pypdfium2", "google.genai", "docx"):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b

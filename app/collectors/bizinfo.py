@@ -10,7 +10,13 @@ from urllib.parse import urljoin
 
 import httpx
 
-from app.collectors.base import request_with_backoff
+from app.collectors.base import (
+    download_to_file,
+    normalize_deadline,
+    request_with_backoff,
+    safe_path_component,
+    stable_notice_id,
+)
 from app.config import get_downloads_dir, load_config
 
 logger = logging.getLogger(__name__)
@@ -41,7 +47,9 @@ async def fetch_bizinfo_notices() -> tuple[list[dict[str, Any]], str]:
         title = str(it.get("pblancNm") or "").strip()
         if not title:
             continue
-        bid_no = str(it.get("pblancId") or it.get("seq") or title[:24]).strip()
+        bid_no = str(it.get("pblancId") or it.get("seq") or "").strip() or stable_notice_id(
+            "BIZ", title, it.get("creatPnttm"), it.get("pblancUrl")
+        )
         results.append(
             {
                 "source": "bizinfo",
@@ -52,7 +60,8 @@ async def fetch_bizinfo_notices() -> tuple[list[dict[str, Any]], str]:
                 "category": str(it.get("pldirSportRealmLclasCodeNm") or "지원사업").strip(),
                 "contract_method": "정부지원사업 공모",
                 "estimated_price": 0,
-                "deadline": str(it.get("reqstBeginEndDe") or "").strip(),
+                # 접수 기간 범위 문자열('20261101 ~ 20261130')에서 마감일만 추출
+                "deadline": normalize_deadline(it.get("reqstBeginEndDe")),
                 "published_at": str(it.get("creatPnttm") or "").strip(),
                 "region_limit": str(it.get("areaNm") or "전국").strip(),
                 "license_limit": str(it.get("trgetNm") or "중소·사회적기업").strip(),
@@ -69,7 +78,7 @@ async def extract_and_download_bizinfo_attachments(bid_no: str, page_url: str) -
     """사람 승인 후 기업마당 공고 URL을 열어 .hwpx/.hwp/.pdf 첨부 링크를 추출·저장한다."""
     if not page_url or not page_url.startswith("http"):
         return []
-    target_dir = get_downloads_dir() / bid_no
+    target_dir = get_downloads_dir() / safe_path_component(bid_no, fallback="bizinfo_notice")
     target_dir.mkdir(parents=True, exist_ok=True)
     downloaded: list[dict[str, Any]] = []
     try:
@@ -79,18 +88,16 @@ async def extract_and_download_bizinfo_attachments(bid_no: str, page_url: str) -
             links = _FILE_LINK_RE.findall(resp.text)[:4]
             for raw_link in links:
                 abs_url = urljoin(page_url, raw_link)
-                fname = Path(abs_url.split("?")[0]).name or f"{bid_no}_notice.pdf"
+                fname = safe_path_component(Path(abs_url.split("?")[0]).name, fallback="notice.pdf")
                 local_path = target_dir / fname
                 try:
-                    fr = await client.get(abs_url)
-                    fr.raise_for_status()
-                    local_path.write_bytes(fr.content)
+                    size = await download_to_file(client, abs_url, local_path)
                     downloaded.append(
                         {
                             "filename": fname,
                             "url": abs_url,
                             "local_path": str(local_path),
-                            "size_bytes": len(fr.content),
+                            "size_bytes": size,
                             "file_type": local_path.suffix.lower().lstrip("."),
                         }
                     )

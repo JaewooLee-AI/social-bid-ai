@@ -1,0 +1,19 @@
+# 2026-11-25 로컬(.venv, Python 3.13)에서 전체 테스트를 통과한 직접 의존성 정확한 버전.
+# 사용: pip install -r requirements.txt -c constraints.txt
+# 갱신: 업그레이드 후 `pytest` 통과를 확인하고 이 파일의 버전을 함께 올리세요.
+pywebview==6.2.1
+fastapi==0.165.0
+starlette==1.10.0
+uvicorn==0.54.0
+pydantic==2.14.4
+python-multipart==0.0.34
+httpx==0.28.1
+pyyaml==6.0.4
+python-hwpx==7.0.0
+pdfplumber==0.11.11
+pypdfium2==5.15.2
+python-docx==1.2.0
+sqlite-vec==0.1.9
+google-genai==3.6.1
+pillow==13.0.0
+pytest==9.2.0

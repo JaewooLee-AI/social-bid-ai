@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
+import os
+import re
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
@@ -14,6 +18,96 @@ from app.config import load_config
 from app.db import get_conn
 
 logger = logging.getLogger(__name__)
+
+# 승인 후 첨부 다운로드 1건당 최대 크기(외부 서버가 거대한 파일을 보내도 디스크·메모리 보호)
+MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
+
+
+class QuotaExceededError(RuntimeError):
+    """설정의 일일 호출 한도(daily_limits)에 도달해 공공 API 호출을 하지 않음."""
+
+
+def safe_int_amount(value: Any) -> int:
+    """'1,234,000', '1234000원', 1.2e6, None 등을 정수 원 단위로 변환. 해석 불가 시 0."""
+    if value is None or isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        return max(0, int(value))
+    text = str(value).replace(",", "").strip()
+    m = re.search(r"\d+(?:\.\d+)?", text)
+    if not m:
+        return 0
+    num = float(m.group(0))
+    if "억" in text:
+        num *= 100_000_000
+    elif "천만" in text:
+        num *= 10_000_000
+    elif "만" in text:
+        num *= 10_000
+    return max(0, int(num))
+
+
+_DATE_RE = re.compile(r"(\d{4})[-./년\s]*(\d{1,2})[-./월\s]*(\d{1,2})")
+
+
+def normalize_deadline(value: Any) -> str:
+    """접수 기간 범위('20261101 ~ 20261130')는 마감일(마지막 날짜)만 'YYYY-MM-DD'로. 날짜가 없으면 원문 유지(예: 상시 접수)."""
+    text = str(value or "").strip()
+    dates = _DATE_RE.findall(text)
+    if not dates:
+        return text
+    y, mo, d = dates[-1]
+    try:
+        return datetime(int(y), int(mo), int(d)).strftime("%Y-%m-%d")
+    except ValueError:
+        return text
+
+
+def stable_notice_id(prefix: str, *parts: Any) -> str:
+    """원천 ID가 없을 때 목록 순번 대신 공고 내용으로 만든 고정 ID(다른 날 다른 공고와 겹치지 않게)."""
+    raw = "|".join(str(p or "").strip() for p in parts)
+    return f"{prefix}-{hashlib.sha1(raw.encode('utf-8')).hexdigest()[:12]}"
+
+
+_UNSAFE_NAME_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')
+
+
+def safe_path_component(value: Any, fallback: str = "file", max_len: int = 80) -> str:
+    """외부 값(공고번호·첨부 파일명)을 폴더/파일 이름 하나로 안전하게 만든다(경로 이탈·예약 문자 제거)."""
+    name = _UNSAFE_NAME_RE.sub("_", Path(str(value or "")).name).strip().strip(".")
+    if not name:
+        return fallback
+    if len(name) > max_len:
+        stem, dot, ext = name.rpartition(".")
+        if dot and 0 < len(ext) <= 8:
+            name = stem[: max_len - len(ext) - 1] + "." + ext
+        else:
+            name = name[:max_len]
+    return name
+
+
+async def download_to_file(client: httpx.AsyncClient, url: str, dest: Path, max_bytes: int = MAX_ATTACHMENT_BYTES) -> int:
+    """스트리밍으로 받아 max_bytes를 넘으면 중단. 완료된 경우에만 대상 경로로 교체하고 바이트 수를 반환."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".part")
+    total = 0
+    try:
+        async with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            declared = int(resp.headers.get("content-length") or 0)
+            if declared > max_bytes:
+                raise ValueError(f"첨부 파일이 너무 큽니다({declared:,} bytes > {max_bytes:,})")
+            with tmp.open("wb") as f:
+                async for chunk in resp.aiter_bytes():
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise ValueError(f"첨부 파일이 너무 큽니다(> {max_bytes:,} bytes)")
+                    f.write(chunk)
+        os.replace(tmp, dest)
+        return total
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
 
 
 def normalize_service_key(key: str) -> str:
@@ -160,6 +254,10 @@ async def request_with_backoff(
     """공공 API 코드 22(일일 한도 초과) 및 코드 23(초당 호출 초과) / 429 대응 지수 백오프 재시도."""
     delay = 0.8
     for attempt in range(max_retries):
+        if remaining_quota(source) <= 0:
+            raise QuotaExceededError(
+                f"[{source}] 오늘 일일 호출 한도(설정의 daily_limits)에 도달해 호출하지 않았습니다. 내일 다시 시도하거나 한도를 조정하세요."
+            )
         increment_quota(source, 1)
         resp = await client.get(url, params=params)
         text_lower = resp.text[:400]

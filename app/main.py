@@ -70,12 +70,24 @@ def _run_smoke_check() -> int:
     rt = api.get_runtime_info()
     assert rt["token"] == token
 
+    # Live 모드 의존성: llm_client가 함수 안에서 지연 import하므로 PyInstaller가 빠뜨려도
+    # 시뮬레이션 모드에서는 드러나지 않는다. 동결 exe에서도 실제로 import되는지 여기서 확인한다.
+    from google import genai
+    from google.genai import types as genai_types
+
+    assert hasattr(genai, "Client") and hasattr(genai_types, "GenerateContentConfig")
+    import docx  # noqa: F401  (DOCX 내보내기)
+    import hwpx
+
+    assert hasattr(hwpx.HwpxDocument, "save"), "python-hwpx 7.x API 필요(HwpxDocument.save)"
+
     print(
         json.dumps(
             {
                 "smoke_check": "ok",
                 "health": r_health.json(),
                 "svi_indicators": len(r_rubric.json().get("indicators", [])),
+                "google_genai": "ok",
             },
             ensure_ascii=False,
             indent=2,

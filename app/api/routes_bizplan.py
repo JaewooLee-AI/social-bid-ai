@@ -455,12 +455,37 @@ def _map_sections_to_hwpx_slots(template_path: str, sections_content: dict[str, 
     return slot_updates or sections_content
 
 
+def _build_bizplan_export_sections(bp: BizPlanDetail) -> list[dict[str, str]]:
+    """내부 키(problem, area_3, t0r1c1 등) 대신 트랙 섹션 제목·양식 위치명으로 내보내고, 트랙 순서를 따른다."""
+    content = {k: v for k, v in bp.sections_content.items() if str(v or "").strip()}
+    titles: dict[str, str] = {}
+    order: list[str] = []
+    for track in (bp.output_track, "psst", "pre_social"):
+        try:
+            for sec in get_track_sections(track):
+                titles.setdefault(sec["key"], sec["title"])
+                if sec["key"] not in order:
+                    order.append(sec["key"])
+        except Exception:
+            continue
+    if bp.template_hwpx_path and Path(bp.template_hwpx_path).exists():
+        try:
+            for slot in parse_hwpx_or_hwp(bp.template_hwpx_path).slots:
+                titles.setdefault(slot.slot_id, slot.location_label or slot.slot_id)
+                if slot.slot_id not in order:
+                    order.append(slot.slot_id)
+        except Exception:
+            pass
+    keys = [k for k in order if k in content] + [k for k in content if k not in order]
+    return [{"title": titles.get(k, f"섹션 {i}"), "content": content[k]} for i, k in enumerate(keys, start=1)]
+
+
 @router.post("/export", response_model=ExportResult)
 def export_bizplan(req: BizPlanExportRequest) -> ExportResult:
     bp = get_bizplan(req.bizplan_id)
     ext = req.format if req.format in {"hwpx", "docx", "md"} else "hwpx"
     out_path = req.output_path.strip() or str(get_exports_dir() / f"{_safe_filename(bp.title)}.{ext}")
-    sections_list = [{"title": k, "content": v} for k, v in bp.sections_content.items()]
+    sections_list = _build_bizplan_export_sections(bp)
     if not sections_list:
         raise HTTPException(status_code=400, detail="내보낼 사업계획서 초안이 없습니다. 먼저 초안을 생성하세요.")
 

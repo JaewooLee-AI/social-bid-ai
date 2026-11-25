@@ -128,6 +128,7 @@ def get_dashboard_summary() -> DashboardSummary:
         svi_grade_label=grade_label,
         priority_purchase_120=svi_cur >= 75.0,
         simulation_mode=is_simulation_active(),
+        profile_is_sample=bool(profile.get("is_sample")),
         vec_available=is_vec_available(),
         quotas=quotas,
         urgent_bids=urgent_bids,

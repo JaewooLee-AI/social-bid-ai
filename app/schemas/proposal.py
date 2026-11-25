@@ -60,9 +60,23 @@ class ProposalExportRequest(BaseModel):
     format: str = "hwpx"  # "hwpx" | "docx" | "md"
 
 
+SAMPLE_PROFILE_EXPORT_WARNING = "샘플(가상) 회사 프로필로 작성된 문서입니다. 설정에서 실제 회사 정보를 저장한 뒤 다시 생성하세요."
+
+
 class ExportResult(BaseModel):
     ok: bool
     output_path: str
     format: str
     mode: str = ""
     warnings: list[str] = Field(default_factory=list)
+
+    def model_post_init(self, __context: Any) -> None:
+        # 모든 내보내기 경로(제안서·사업계획서, hwpx/docx/md)에 공통으로 샘플 프로필 경고를 붙인다
+        from app.config import load_profile
+
+        try:
+            is_sample = bool(load_profile().get("is_sample"))
+        except Exception:
+            is_sample = False
+        if is_sample and SAMPLE_PROFILE_EXPORT_WARNING not in self.warnings:
+            self.warnings.append(SAMPLE_PROFILE_EXPORT_WARNING)

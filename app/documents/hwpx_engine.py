@@ -9,6 +9,7 @@ from typing import Any
 
 import hwpx
 
+from app.documents.errors import DocumentParseError
 from app.schemas.docs import HwpxSlot, ParsedDocument
 
 logger = logging.getLogger(__name__)
@@ -50,14 +51,26 @@ def _is_table_cell_place(place: Any) -> bool:
     return where == "cell" and getattr(place, "table", None) is not None
 
 
+def _open_hwpx_or_raise(path: Path) -> Any:
+    """손상·보안 거부 파일은 내부 예외 대신 DocumentParseError(→ HTTP 400)로 변환한다."""
+    try:
+        return hwpx.HwpxDocument.open(str(path))
+    except FileNotFoundError:
+        raise
+    except Exception as exc:
+        raise DocumentParseError(
+            f"한글 문서를 열 수 없습니다({path.name}). 손상되었거나, 암호가 걸렸거나, 보안 검사에서 거부된 파일입니다: {exc}"
+        ) from exc
+
+
 def parse_hwpx_or_hwp(file_path: str | Path) -> ParsedDocument:
     """한컴오피스 없이 .hwpx 및 .hwp(5.0) 문서를 파싱해 본문·표·개요·입력 슬롯을 추출한다."""
     path = Path(file_path)
     ext = path.suffix.lower().lstrip(".")
     if ext not in {"hwpx", "hwp"}:
-        raise ValueError(f"지원하지 않는 한글 문서 포맷입니다: {path.suffix}")
+        raise DocumentParseError(f"지원하지 않는 한글 문서 포맷입니다: {path.suffix}")
 
-    doc = hwpx.HwpxDocument.open(str(path))
+    doc = _open_hwpx_or_raise(path)
     try:
         conversion_warnings: list[str] = []
         report = getattr(doc, "conversion_report", None)
@@ -276,7 +289,7 @@ def patch_hwpx(
     if out.suffix.lower() != ".hwpx":
         out = out.with_suffix(".hwpx")
 
-    doc = hwpx.HwpxDocument.open(str(src))
+    doc = _open_hwpx_or_raise(Path(src))
     warnings: list[str] = []
     patched_slots: list[str] = []
     try:

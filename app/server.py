@@ -24,6 +24,7 @@ from app.api.routes_proposal import router as proposal_router
 from app.api.routes_settings import router as settings_router
 from app.config import get_data_dir, get_resource_dir, seed_defaults
 from app.db import init_db, is_vec_available
+from app.documents.errors import DocumentParseError
 from app.schemas.common import HealthResponse
 
 
@@ -50,6 +51,15 @@ def create_app(session_token: str | None = None, sync_profile_rag: bool = True) 
     async def _budget_exceeded_handler(_request: Any, exc: BudgetExceededError) -> JSONResponse:
         # 402 Payment Required: 월 LLM 예산 초과로 신규 Live 호출 차단
         return JSONResponse(status_code=402, content={"detail": str(exc)})
+
+    @app.exception_handler(DocumentParseError)
+    async def _document_parse_handler(_request: Any, exc: DocumentParseError) -> JSONResponse:
+        # 400: 사용자가 올린 파일 문제(손상·암호·보안 거부). 예전엔 500 "요청 실패"만 보였음
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(FileNotFoundError)
+    async def _file_not_found_handler(_request: Any, exc: FileNotFoundError) -> JSONResponse:
+        return JSONResponse(status_code=404, content={"detail": str(exc) or "파일을 찾을 수 없습니다."})
 
     @app.exception_handler(EmbeddingUnavailableError)
     async def _embedding_unavailable_handler(_request: Any, exc: EmbeddingUnavailableError) -> JSONResponse:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.collectors.region import is_nationwide, region_matches
 from app.config import load_profile
 
 
@@ -51,6 +52,11 @@ def apply_social_enterprise_rules(
         privilege_tier = "general_priority"
         privilege_label = "사회적기업 지원사업 트랙"
 
+    if is_se_eligible and "예비" in str(profile.get("social_type") or ""):
+        warnings.append("예비사회적기업은 국가계약법 수의계약 특례 대상이 아닐 수 있음 — 인증 여부·발주처 지침 확인 필요")
+    if profile.get("is_sample"):
+        warnings.append("샘플 회사 프로필 기준 판정입니다 — 설정에서 실제 회사 정보를 저장하세요")
+
     # 2. 중소기업자간 경쟁제품 직접생산확인 의무 (1,000만 원 이상)
     dp_items = [x.strip() for x in (profile.get("direct_production_items") or []) if x.strip()]
     if is_sme and est_price >= 10_000_000:
@@ -62,12 +68,14 @@ def apply_social_enterprise_rules(
     # 3. 지역제한 필터
     comp_region = str(profile.get("region") or "")
     include_nationwide = bool(profile.get("include_nationwide", True))
-    if region_limit and region_limit not in ("전국", "제한없음"):
-        short_region = comp_region[:2] if comp_region else ""
-        if short_region and short_region not in region_limit:
+    region_ok = region_matches(comp_region, region_limit)
+    if not is_nationwide(region_limit):
+        if region_ok is False:
             rule_passed = False
             warnings.append(f"지역제한 불일치 (공고: {region_limit} / 본사: {comp_region})")
-    elif region_limit in ("전국", "제한없음") and not include_nationwide:
+        elif region_ok is None:
+            warnings.append(f"지역제한 확인 필요 (공고: {region_limit} / 본사: {comp_region or '미입력'})")
+    elif not include_nationwide:
         rule_passed = False
         warnings.append("프로필 설정에서 전국 공고 포함 옵션이 비활성화되어 있습니다.")
 
