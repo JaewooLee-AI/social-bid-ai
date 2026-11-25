@@ -1,0 +1,265 @@
+{
+  "version": "2026.1",
+  "title": "고용노동부·한국사회적기업진흥원 사회적가치지표(SVI) 14개 지표 및 정부지원 평가 기준",
+  "total_points": 100,
+  "quantitative_ratio": 0.65,
+  "qualitative_ratio": 0.35,
+  "grades": [
+    {
+      "key": "excellent",
+      "label": "탁월",
+      "min_score": 90,
+      "max_score": 100,
+      "priority_purchase_bonus_pct": 120,
+      "summary": "공공기관 우선구매 실적 120% 가중 인정 구간 (최상위)"
+    },
+    {
+      "key": "outstanding",
+      "label": "우수",
+      "min_score": 75,
+      "max_score": 89.99,
+      "priority_purchase_bonus_pct": 120,
+      "summary": "공공기관 우선구매 실적 120% 가중 인정 구간 (75점 이상)"
+    },
+    {
+      "key": "good",
+      "label": "양호",
+      "min_score": 60,
+      "max_score": 74.99,
+      "priority_purchase_bonus_pct": 100,
+      "summary": "안정적 사회적 가치 창출 단계 (75점 진입 시 120% 가중)"
+    },
+    {
+      "key": "fair",
+      "label": "미흡",
+      "min_score": 45,
+      "max_score": 59.99,
+      "priority_purchase_bonus_pct": 100,
+      "summary": "사회적 성과 지향성·고용·이윤 환원 보강 필요"
+    },
+    {
+      "key": "weak",
+      "label": "취약",
+      "min_score": 0,
+      "max_score": 44.99,
+      "priority_purchase_bonus_pct": 100,
+      "summary": "사회적 목적 및 재무 자생력 구조 재설계 권장"
+    }
+  ],
+  "indicators": [
+    {
+      "id": "svi_01",
+      "no": 1,
+      "domain": "social",
+      "domain_label": "사회적 성과",
+      "name": "사업활동의 사회적 성과 지향성",
+      "max_score": 10,
+      "type": "qualitative",
+      "description": "주된 사업활동(제품·서비스)이 해결하려는 사회문제의 명확성 및 수혜 대상 연계 정도"
+    },
+    {
+      "id": "svi_02",
+      "no": 2,
+      "domain": "social",
+      "domain_label": "사회적 성과",
+      "name": "이윤의 사회적 환원 노력도",
+      "max_score": 10,
+      "type": "quantitative",
+      "description": "배분 가능 이윤의 2/3 이상 사회적 목적 재투자 또는 지역사회 환원 비율"
+    },
+    {
+      "id": "svi_03",
+      "no": 3,
+      "domain": "social",
+      "domain_label": "사회적 성과",
+      "name": "근로자 임금수준",
+      "max_score": 10,
+      "type": "quantitative",
+      "description": "최저임금 대비 지급 임금 수준 및 고용안정·복리후생 수준"
+    },
+    {
+      "id": "svi_04",
+      "no": 4,
+      "domain": "social",
+      "domain_label": "사회적 성과",
+      "name": "사회적 성과 추구 여부",
+      "max_score": 5,
+      "type": "qualitative",
+      "description": "정관·사업계획상 구체적 사회적 미션과 목표 지표 설정 여부"
+    },
+    {
+      "id": "svi_05",
+      "no": 5,
+      "domain": "social",
+      "domain_label": "사회적 성과",
+      "name": "사회적 성과 평가체계 구축",
+      "max_score": 5,
+      "type": "qualitative",
+      "description": "내부 KPI 측정, 성과 보고서 발간, 이해관계자 피드백 체계 구축"
+    },
+    {
+      "id": "svi_06",
+      "no": 6,
+      "domain": "social",
+      "domain_label": "사회적 성과",
+      "name": "사회적경제 조직간 협력 수준",
+      "max_score": 5,
+      "type": "quantitative",
+      "description": "타 사회적기업·협동조합·마을기업과의 공동사업, 우선구매, 위탁거래 실적"
+    },
+    {
+      "id": "svi_07",
+      "no": 7,
+      "domain": "social",
+      "domain_label": "사회적 성과",
+      "name": "지역사회와의 협력 수준",
+      "max_score": 5,
+      "type": "qualitative",
+      "description": "지자체, 지역 복지관, 주민 네트워크 등 지역사회 공헌 및 연계 활동"
+    },
+    {
+      "id": "svi_08",
+      "no": 8,
+      "domain": "social",
+      "domain_label": "사회적 성과",
+      "name": "참여적 의사결정 비율",
+      "max_score": 5,
+      "type": "quantitative",
+      "description": "근로자·수혜자·지역 이해관계자가 이사회·운영위원회 의사결정에 참여하는 비율"
+    },
+    {
+      "id": "svi_09",
+      "no": 9,
+      "domain": "social",
+      "domain_label": "사회적 성과",
+      "name": "근로자 역량강화 노력",
+      "max_score": 5,
+      "type": "quantitative",
+      "description": "1인당 교육훈련 시간 및 직무 역량 개발 지원 프로그램 운영"
+    },
+    {
+      "id": "svi_10",
+      "no": 10,
+      "domain": "economic",
+      "domain_label": "경제적 성과",
+      "name": "고용성과",
+      "max_score": 10,
+      "type": "quantitative",
+      "description": "유급근로자 수, 취약계층 고용비율(30% 이상 등) 및 고용 증가율"
+    },
+    {
+      "id": "svi_11",
+      "no": 11,
+      "domain": "economic",
+      "domain_label": "경제적 성과",
+      "name": "매출성과",
+      "max_score": 10,
+      "type": "quantitative",
+      "description": "보조금 제외 영업활동 총매출액 및 전년 대비 매출 성장률"
+    },
+    {
+      "id": "svi_12",
+      "no": 12,
+      "domain": "economic",
+      "domain_label": "경제적 성과",
+      "name": "영업성과",
+      "max_score": 5,
+      "type": "quantitative",
+      "description": "영업이익 및 동종업종 중소기업 대비 영업이익률"
+    },
+    {
+      "id": "svi_13",
+      "no": 13,
+      "domain": "economic",
+      "domain_label": "경제적 성과",
+      "name": "노동생산성",
+      "max_score": 5,
+      "type": "quantitative",
+      "description": "근로자 1인당 부가가치 또는 1인당 매출액 수준"
+    },
+    {
+      "id": "svi_14",
+      "no": 14,
+      "domain": "innovation",
+      "domain_label": "혁신 성과",
+      "name": "기업 운영 및 제품의 혁신성",
+      "max_score": 10,
+      "type": "qualitative",
+      "description": "디지털 전환, 신제품·신서비스 개발, 특허·인증, 새로운 사회문제 해결 방식"
+    }
+  ],
+  "psst_blocks": [
+    {
+      "key": "problem",
+      "title": "P — Problem (문제인식)",
+      "weight_min": 20,
+      "weight_max": 25,
+      "core_question": "시장과 사회에 실제로 검증된 고통(Pain Point)이 존재하는가?"
+    },
+    {
+      "key": "solution",
+      "title": "S — Solution (실현가능성·솔루션)",
+      "weight_min": 25,
+      "weight_max": 30,
+      "core_question": "이 팀이 제안한 제품·서비스가 문제를 실질적으로 해결할 수 있는가?"
+    },
+    {
+      "key": "scaleup",
+      "title": "S — Scale-up (성장전략·수익모델)",
+      "weight_min": 25,
+      "weight_max": 30,
+      "core_question": "보조금 없이 지속 가능한 영업 수익을 어떻게 창출하고 확장할 것인가?"
+    },
+    {
+      "key": "team",
+      "title": "T — Team (팀 역량·사회적 가치 거버넌스)",
+      "weight_min": 15,
+      "weight_max": 20,
+      "core_question": "대표자와 팀원이 실행할 역량과 민주적 의사결정 구조를 갖추었는가?"
+    }
+  ],
+  "social_purpose_types": [
+    {
+      "key": "job_creation",
+      "label": "일자리 제공형",
+      "kpi_hint": "전체 근로자 중 취약계층 고용비율 30% 이상 유지·확대 및 직무 전환 교육"
+    },
+    {
+      "key": "social_service",
+      "label": "사회서비스 제공형",
+      "kpi_hint": "전체 서비스 수혜자 중 취약계층 비율 30% 이상 및 서비스 만족도/이용 건수"
+    },
+    {
+      "key": "community_contribution",
+      "label": "지역사회 공헌형",
+      "kpi_hint": "지역 특화 자원 활용, 지역 취약계층 고용·서비스 비율 20% 이상 또는 지역 문제 해결"
+    },
+    {
+      "key": "mixed",
+      "label": "혼합형 (일자리+사회서비스)",
+      "kpi_hint": "취약계층 고용비율 20% 이상 및 사회서비스 수혜 비율 20% 이상 동시 달성"
+    },
+    {
+      "key": "other",
+      "label": "기타형 (창의·혁신)",
+      "kpi_hint": "계량 측정이 곤란하나 사회적 목적 실현이 명확한 창의적·환경적·문화적 모델"
+    }
+  ],
+  "pre_social_min_requirements": [
+    "조직형태: 민법상 법인·조합, 상법상 회사, 협동조합, 비영리민간단체 등 유급근로자 고용 가능 조직",
+    "사회적 목적 실현: 정관·규약상 사회적 목적 명시 및 5가지 유형 중 해당 기준 충족",
+    "유급근로자 고용 및 영업활동 수행: 공고일 기준 유급근로자 1인 이상 고용 및 재화·서비스 생산·판매 실적",
+    "배분 가능 이윤의 2/3 이상 사회적 목적 재투자 (상법상 회사 등 영리법인 필수 정관 조항)",
+    "이해관계자가 참여하는 민주적 의사결정구조 구축 (이사회·운영위원회 등 구성 및 회의록 증빙)"
+  ],
+  "pre_social_8_areas": [
+    "1. 기업 현황 및 대표자·조직 역량",
+    "2. 사회적기업 인증 신청(예비지정) 유형 및 추진 배경",
+    "3. 해결하고자 하는 사회문제(Pain Point) 및 사회적 목적 실현 계획",
+    "4. 주력 사업 아이템 및 문제해결 메커니즘",
+    "5. 목표 시장·수익창출 모델(B2G/B2B/B2C) 및 단위 경제성",
+    "6. 연차별 매출·고용·취약계층 채용 및 3개년 정식 인증 로드맵",
+    "7. 민주적 의사결정구조 및 근로자 역량강화·임금 계획",
+    "8. 소요 자금 조달·집행 계획 및 이윤의 사회적 환원 계획"
+  ]
+}

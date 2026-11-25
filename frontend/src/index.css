@@ -1,0 +1,215 @@
+@import "tailwindcss";
+
+:root {
+  --navy: #0F2942;
+  --navy-hover: #1E3A5F;
+  --accent: #0D9488;
+  --accent-soft: #CCFBF1;
+  --bg-canvas: #F6F8FB;
+  --surface-card: #FFFFFF;
+  --border-hair: #E2E8F0;
+  --ink-primary: #0F172A;
+  --ink-secondary: #475569;
+}
+
+body {
+  font-family: "Pretendard Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  background-color: var(--bg-canvas);
+  color: var(--ink-primary);
+  margin: 0;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus visibility */
+:is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Form validation: :user-invalid only (never premature :invalid) */
+:is(input, select, textarea):user-invalid {
+  border-color: #DC2626;
+  background-color: #FEF2F2;
+}
+
+.visually-hidden {
+  position: absolute;
+  clip-path: inset(50%);
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  white-space: nowrap;
+}
+
+/* Native <dialog> modal scroll-lock and backdrop rules (Modern Web Guidance: dialog) */
+dialog {
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border-hair);
+  border-radius: 12px;
+  background: var(--surface-card);
+  color: var(--ink-primary);
+  box-shadow: 0 20px 50px rgb(15 23 42 / 0.22);
+  max-inline-size: min(540px, 92vw);
+  inline-size: 100%;
+}
+
+dialog[open] {
+  display: block;
+}
+
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgb(15 23 42 / 0.48);
+  backdrop-filter: blur(2px);
+}
+
+/* Accessible single-row tablist (Modern Web Guidance: tabs) */
+.mwg-tablist {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border-hair);
+  scrollbar-width: thin;
+}
+
+.mwg-tablist [role="tab"] {
+  position: relative;
+  flex: none;
+  padding: 0.625rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ink-secondary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mwg-tablist [role="tab"][aria-selected="true"] {
+  color: var(--navy);
+}
+
+.mwg-tablist [role="tab"][aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  border-block-end: 3px solid var(--accent);
+}
+
+/* Responsive Data Table with sticky headers & container-query card stack (Modern Web Guidance: responsive-table) */
+.table-wrapper {
+  overflow: auto;
+  max-inline-size: 100%;
+  max-block-size: min(640px, 68vh);
+  container-type: inline-size;
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  background: var(--surface-card);
+}
+
+.bids-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+  font-size: 0.875rem;
+  --label-1: "구분";
+  --label-2: "공고명";
+  --label-3: "발주·주관기관";
+  --label-4: "추정가격";
+  --label-5: "마감일";
+  --label-6: "적합도";
+  --label-7: "검토 상태";
+}
+
+.bids-table thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  background: #F1F5F9;
+}
+
+.bids-table thead th {
+  padding: 0.7rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #334155;
+  border-bottom: 1px solid var(--border-hair);
+  white-space: nowrap;
+}
+
+.bids-table tbody th,
+.bids-table tbody td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #F1F5F9;
+  vertical-align: middle;
+}
+
+.bids-table tbody th {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--surface-card);
+  font-weight: 600;
+  text-align: left;
+}
+
+.bids-table tbody tr[data-selected="true"] th,
+.bids-table tbody tr[data-selected="true"] td {
+  background: #F0FDFA;
+}
+
+.bids-table tbody tr:hover th,
+.bids-table tbody tr:hover td {
+  background: #F8FAFC;
+}
+
+@container (width < 600px) {
+  .bids-table,
+  .bids-table thead,
+  .bids-table tbody,
+  .bids-table tr,
+  .bids-table th,
+  .bids-table td {
+    display: block;
+  }
+
+  .bids-table thead {
+    display: none;
+  }
+
+  .bids-table tbody tr {
+    margin: 0.75rem;
+    border: 1px solid var(--border-hair);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .bids-table tbody th {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 2;
+    background: #F1F5F9;
+    border-bottom: 1px solid var(--border-hair);
+  }
+
+  .bids-table tbody td:nth-child(1)::before { content: var(--label-1) ": "; font-weight: 600; color: #475569; }
+  .bids-table tbody td:nth-child(3)::before { content: var(--label-3) ": "; font-weight: 600; color: #475569; }
+  .bids-table tbody td:nth-child(4)::before { content: var(--label-4) ": "; font-weight: 600; color: #475569; }
+  .bids-table tbody td:nth-child(5)::before { content: var(--label-5) ": "; font-weight: 600; color: #475569; }
+  .bids-table tbody td:nth-child(6)::before { content: var(--label-6) ": "; font-weight: 600; color: #475569; }
+  .bids-table tbody td:nth-child(7)::before { content: var(--label-7) ": "; font-weight: 600; color: #475569; }
+}

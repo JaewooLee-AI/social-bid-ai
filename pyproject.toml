@@ -1,0 +1,9 @@
+[project]
+name = "social-bid-ai"
+version = "0.1.0"
+description = "사회적기업 공공입찰·제안서·사업계획서 자동화 데스크톱 앱 (PyWebview + FastAPI + React)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
