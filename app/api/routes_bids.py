@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.concurrency import run_in_threadpool
 
+from app.ai.job_guard import acquire_or_409, release
 from app.ai.scoring import score_bids_batch
 from app.api.deps import verify_csrf_token
 from app.collectors.base import get_quota_statuses, update_sync_state
@@ -72,6 +73,7 @@ def _row_to_bid_item(row: Any) -> BidItem:
         region_limit=row["region_limit"],
         license_limit=row["license_limit"],
         is_sme_competing=bool(row["is_sme_competing"]),
+        is_demo=bool(row["is_demo"]),
         url=row["url"],
         privilege_tier=row["privilege_tier"],
         privilege_label=row["privilege_label"],
@@ -156,7 +158,7 @@ def _write_bids(
                         deadline = ?, published_at = ?, region_limit = ?, license_limit = ?,
                         is_sme_competing = ?, url = ?, raw_json = ?,
                         privilege_tier = ?, privilege_label = ?, rule_passed = ?, rule_warnings_json = ?,
-                        ai_score = ?, ai_summary = ?, ai_risks_json = ?, updated_at = ?
+                        ai_score = ?, ai_summary = ?, ai_risks_json = ?, is_demo = ?, updated_at = ?
                     WHERE id = ?
                     """,
                     (
@@ -179,6 +181,7 @@ def _write_bids(
                         float(ai_res["score"]),
                         ai_res["summary"],
                         json.dumps(ai_res["risks"], ensure_ascii=False),
+                        1 if enriched.get("is_demo") else 0,
                         now,
                         ex["id"],
                     ),
@@ -191,8 +194,8 @@ def _write_bids(
                         estimated_price, deadline, published_at, region_limit, license_limit,
                         is_sme_competing, url, raw_json, privilege_tier, privilege_label,
                         rule_passed, rule_warnings_json, ai_score, ai_summary, ai_risks_json,
-                        status, attachments_json, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+                        status, attachments_json, is_demo, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
                     """,
                     (
                         enriched["source"],
@@ -218,6 +221,7 @@ def _write_bids(
                         ai_res["summary"],
                         json.dumps(ai_res["risks"], ensure_ascii=False),
                         atts_json,
+                        1 if enriched.get("is_demo") else 0,
                         now,
                         now,
                     ),
@@ -226,112 +230,85 @@ def _write_bids(
     return saved
 
 
+_SOURCE_SPECS: dict[str, tuple[str, str]] = {
+    "g2b": ("g2b_service_key", "나라장터"),
+    "seis": ("seis_service_key", "한국사회적기업진흥원"),
+    "bizinfo": ("bizinfo_api_key", "기업마당"),
+}
+
+
 @router.post("/sync", response_model=BidSyncResult)
 async def sync_bids(req: BidSyncRequest) -> BidSyncResult:
+    """공고 수집. 샘플(데모) 공고는 해당 소스의 API 키가 **없을 때만** 채운다.
+
+    키가 있는데 실제 수집이 실패하면 샘플로 대체하지 않고 실패로 보고한다(가짜 공고가 실제 인박스에 섞이는 것을 방지).
+    """
     cfg = load_config()["public_api"]
-    profile = load_profile()
+    profile = await run_in_threadpool(load_profile)
     demo_pool = build_demo_bids()
 
     reports: list[BidSyncSourceReport] = []
     collected: list[dict[str, Any]] = []
-
     g2b_keyword = req.keywords[0].strip() if req.keywords else ""
 
-    for src in req.sources:
-        if src == "g2b":
-            has_key = bool((cfg.get("g2b_service_key") or "").strip())
+    job_token = acquire_or_409("bids:sync", "공고 수집")
+    try:
+        for src in req.sources:
+            spec = _SOURCE_SPECS.get(src)
+            if spec is None:
+                continue
+            key_field, label = spec
+            has_key = bool((cfg.get(key_field) or "").strip())
+
             if has_key:
                 try:
-                    items, chunks, msg = await fetch_g2b_bids(days_back=req.days_back, keyword=g2b_keyword)
-                    update_sync_state("g2b", "ok", len(items))
-                    collected.extend(items)
+                    if src == "g2b":
+                        items, chunks, msg = await fetch_g2b_bids(days_back=req.days_back, keyword=g2b_keyword)
+                    elif src == "seis":
+                        items, msg = await fetch_seis_notices()
+                        chunks = 1
+                    else:
+                        items, msg = await fetch_bizinfo_notices()
+                        chunks = 1
+                except Exception as exc:
+                    logger.warning("%s 수집 실패: %s", label, exc)
+                    await run_in_threadpool(update_sync_state, src, f"error: {exc}", 0)
                     reports.append(
                         BidSyncSourceReport(
-                            source="g2b", fetched_count=len(items), saved_count=len(items),
-                            chunks_requested=chunks, used_demo=False, message=msg,
+                            source=src,
+                            failed=True,
+                            message=f"{label} 수집 실패: {exc} (샘플 공고로 대체하지 않았습니다)",
                         )
                     )
                     continue
-                except Exception as exc:
-                    update_sync_state("g2b", f"error: {exc}", 0)
-                    if not req.use_demo_if_no_key:
-                        reports.append(BidSyncSourceReport(source="g2b", message=f"수집 실패: {exc}"))
-                        continue
-            if req.use_demo_if_no_key:
-                d_items = [d for d in demo_pool if d["source"] == "g2b"]
-                update_sync_state("g2b", "demo", len(d_items))
-                collected.extend(d_items)
+                await run_in_threadpool(update_sync_state, src, "ok", len(items))
+                collected.extend(items)
                 reports.append(
                     BidSyncSourceReport(
-                        source="g2b", fetched_count=len(d_items), saved_count=len(d_items),
-                        chunks_requested=max(1, (req.days_back + 6) // 7), used_demo=True,
-                        message="나라장터 API 키 미설정 — 2026 샘플 공고 시드 반영",
+                        source=src, fetched_count=len(items), saved_count=len(items),
+                        chunks_requested=chunks, used_demo=False, message=msg,
                     )
                 )
+                continue
 
-        elif src == "seis":
-            has_key = bool((cfg.get("seis_service_key") or "").strip())
-            if has_key:
-                try:
-                    items, msg = await fetch_seis_notices()
-                    update_sync_state("seis", "ok", len(items))
-                    collected.extend(items)
-                    reports.append(
-                        BidSyncSourceReport(
-                            source="seis", fetched_count=len(items), saved_count=len(items),
-                            chunks_requested=1, used_demo=False, message=msg,
-                        )
-                    )
-                    continue
-                except Exception as exc:
-                    update_sync_state("seis", f"error: {exc}", 0)
-                    if not req.use_demo_if_no_key:
-                        reports.append(BidSyncSourceReport(source="seis", message=f"수집 실패: {exc}"))
-                        continue
             if req.use_demo_if_no_key:
-                d_items = [d for d in demo_pool if d["source"] == "seis"]
-                update_sync_state("seis", "demo", len(d_items))
+                d_items = [d for d in demo_pool if d["source"] == src]
+                await run_in_threadpool(update_sync_state, src, "demo", len(d_items))
                 collected.extend(d_items)
                 reports.append(
                     BidSyncSourceReport(
-                        source="seis", fetched_count=len(d_items), saved_count=len(d_items),
+                        source=src, fetched_count=len(d_items), saved_count=len(d_items),
                         chunks_requested=1, used_demo=True,
-                        message="진흥원 API 키 미설정 — 2026 샘플 지원사업 시드 반영",
+                        message=f"{label} API 키 미설정 — 샘플 공고 {len(d_items)}건 표시(실제 공고 아님)",
                     )
                 )
+            else:
+                reports.append(BidSyncSourceReport(source=src, message=f"{label} API 키 미설정"))
 
-        elif src == "bizinfo":
-            has_key = bool((cfg.get("bizinfo_api_key") or "").strip())
-            if has_key:
-                try:
-                    items, msg = await fetch_bizinfo_notices()
-                    update_sync_state("bizinfo", "ok", len(items))
-                    collected.extend(items)
-                    reports.append(
-                        BidSyncSourceReport(
-                            source="bizinfo", fetched_count=len(items), saved_count=len(items),
-                            chunks_requested=1, used_demo=False, message=msg,
-                        )
-                    )
-                    continue
-                except Exception as exc:
-                    update_sync_state("bizinfo", f"error: {exc}", 0)
-                    if not req.use_demo_if_no_key:
-                        reports.append(BidSyncSourceReport(source="bizinfo", message=f"수집 실패: {exc}"))
-                        continue
-            if req.use_demo_if_no_key:
-                d_items = [d for d in demo_pool if d["source"] == "bizinfo"]
-                update_sync_state("bizinfo", "demo", len(d_items))
-                collected.extend(d_items)
-                reports.append(
-                    BidSyncSourceReport(
-                        source="bizinfo", fetched_count=len(d_items), saved_count=len(d_items),
-                        chunks_requested=1, used_demo=True,
-                        message="기업마당 API 키 미설정 — 2026 샘플 공고 시드 반영",
-                    )
-                )
+        saved, scored = await _upsert_and_score_bids(collected, profile)
+    finally:
+        release("bids:sync", job_token)
 
-    saved, scored = await _upsert_and_score_bids(collected, profile)
     return BidSyncResult(
         total_fetched=len(collected),
         total_saved=saved,
@@ -342,9 +319,13 @@ async def sync_bids(req: BidSyncRequest) -> BidSyncResult:
 
 @router.post("/seed-demo", response_model=BidSyncResult)
 async def seed_demo_bids() -> BidSyncResult:
-    profile = load_profile()
+    profile = await run_in_threadpool(load_profile)
     demo_pool = build_demo_bids()
-    saved, scored = await _upsert_and_score_bids(demo_pool, profile)
+    job_token = acquire_or_409("bids:sync", "공고 수집")
+    try:
+        saved, scored = await _upsert_and_score_bids(demo_pool, profile)
+    finally:
+        release("bids:sync", job_token)
     for src in ("g2b", "seis", "bizinfo"):
         cnt = sum(1 for d in demo_pool if d["source"] == src)
         update_sync_state(src, "demo", cnt)
@@ -458,10 +439,9 @@ async def decide_bid(bid_id: int, req: BidDecisionRequest) -> BidDecisionRespons
         return BidDecisionResponse(bid=_row_to_bid_item(updated))
 
     # req.status == "approved": 온디맨드 첨부 다운로드 + Go/No-Go 파싱 + 제안서 초안 공간 준비
-    is_demo_att = any(str(a.get("url", "")).startswith("demo://") for a in existing_atts) or not any(
-        str(a.get("url", "")).startswith("http") for a in existing_atts
-    )
-    if is_demo_att:
+    # 샘플 RFP 생성은 앱 내장 샘플 공고에만 적용한다. (예전에는 http 첨부가 없는 실제 공고도
+    # 샘플로 취급해 가짜 RFP로 Go/No-Go·목차를 만들었다.)
+    if bool(row["is_demo"]):
         new_atts = await run_in_threadpool(materialize_demo_attachments, row["bid_no"], existing_atts)
     elif row["source"] == "g2b":
         new_atts = await download_g2b_attachments(row["bid_no"], row["bid_ord"], existing_atts)

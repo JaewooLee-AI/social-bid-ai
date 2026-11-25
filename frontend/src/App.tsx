@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   FileText,
   LayoutDashboard,
@@ -33,6 +33,9 @@ export function App() {
   const [selectedProposalId, setSelectedProposalId] = useState<number | null>(null);
   const [selectedBizPlanId, setSelectedBizPlanId] = useState<number | null>(null);
   const [toast, setToast] = useState<string>('');
+  // 공고 수집 실행 잠금: ref는 await 이전 동기 중복 클릭 차단, state는 버튼 비활성화
+  const syncLockRef = useRef(false);
+  const [syncingBids, setSyncingBids] = useState(false);
 
   const notify = (msg: string) => {
     setToast(msg);
@@ -66,13 +69,24 @@ export function App() {
     if (target === 'dashboard') void refreshDashboard();
   };
 
-  const handleSyncDemo = async () => {
+  const handleSyncBids = async () => {
+    if (syncLockRef.current) return;
+    syncLockRef.current = true;
+    setSyncingBids(true);
     try {
       const res = await api.syncBids(7);
-      notify(`공고 ${res.total_saved}건 수집·평가 완료`);
+      const failed = res.reports.filter((r) => r.failed).map((r) => r.message);
+      notify(
+        failed.length > 0
+          ? `공고 ${res.total_saved}건 저장 · 일부 수집 실패: ${failed.join(' / ')}`
+          : `공고 ${res.total_saved}건 수집·평가 완료`
+      );
       await refreshDashboard();
     } catch (e) {
       notify(`수집 실패: ${(e as Error).message}`);
+    } finally {
+      syncLockRef.current = false;
+      setSyncingBids(false);
     }
   };
 
@@ -164,7 +178,8 @@ export function App() {
             summary={summary}
             loading={loadingDash}
             onRefresh={refreshDashboard}
-            onSyncDemoBids={handleSyncDemo}
+            onSyncBids={handleSyncBids}
+            syncing={syncingBids}
             onNavigate={handleNavigate}
           />
         )}

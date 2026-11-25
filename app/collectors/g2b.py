@@ -12,8 +12,12 @@ import httpx
 from app.collectors.base import (
     chunk_date_range,
     normalize_service_key,
+    remaining_quota,
     request_with_backoff,
 )
+
+# 페이지 수집 중 남겨둘 일일 호출 여유분(세부 면허·지역 보강, 첨부 조회, 연결 테스트용)
+_QUOTA_RESERVE = 20
 from app.config import get_downloads_dir, load_config
 
 logger = logging.getLogger(__name__)
@@ -144,15 +148,20 @@ async def enrich_g2b_bid_limits(
 
 async def fetch_g2b_bids(
     days_back: int = 7,
-    max_pages: int = 1,
-    num_of_rows: int = 50,
+    max_pages: int | None = None,
+    num_of_rows: int = 100,
     keyword: str = "",
 ) -> tuple[list[dict[str, Any]], int, str]:
     """
-    최근 조회 기간을 최대 7일 윈도우로 분할하고,
+    최근 조회 기간을 최대 7일 윈도우로 분할하고, 윈도우·분류별로 totalCount까지 페이지를 넘기며
     용역·물품 목록 및 세부 면허·지역 정보를 함께 수집한다.
+
+    예전에는 윈도우·분류당 첫 50건만 가져와 나머지를 조용히 누락했다. 이제는 페이지 상한(g2b_max_pages)
+    또는 일일 호출 한도 때문에 다 못 가져온 경우 결과 메시지에 생략 건수를 명시한다.
     """
     cfg = load_config()["public_api"]
+    if max_pages is None:
+        max_pages = max(1, int(cfg.get("g2b_max_pages") or 10))
     key = normalize_service_key(cfg.get("g2b_service_key", ""))
     if not key:
         return [], 0, "나라장터 API 키 미설정"
@@ -165,11 +174,21 @@ async def fetch_g2b_bids(
     windows = chunk_date_range(start_dt, now, max_days=7)
     collected: dict[tuple[str, str], dict[str, Any]] = {}
     last_api_error: tuple[str, str] | None = None
+    reported_total = 0  # 윈도우·분류별 totalCount 합(중복 공고 포함 가능)
+    skipped_by_page_cap = 0
+    stopped_by_quota = False
 
     async with httpx.AsyncClient(timeout=20.0) as client:
         for cat, op in [("용역", CATEGORY_OPERATIONS["용역"]), ("물품", CATEGORY_OPERATIONS["물품"])]:
             for w_start, w_end in windows:
+                if stopped_by_quota:
+                    break
+                fetched_here = 0
+                total_here = 0
                 for page_no in range(1, max_pages + 1):
+                    if remaining_quota("g2b") <= _QUOTA_RESERVE:
+                        stopped_by_quota = True
+                        break
                     params: dict[str, Any] = {
                         "serviceKey": key,
                         "pageNo": str(page_no),
@@ -191,12 +210,20 @@ async def fetch_g2b_bids(
                         last_api_error = (err_code, err_msg)
                         break
                     body = data.get("response", {}).get("body", {})
-                    total_count = int(body.get("totalCount") or 0)
+                    try:
+                        total_count = int(body.get("totalCount") or 0)
+                    except (TypeError, ValueError):
+                        total_count = 0
+                    total_here = max(total_here, total_count)
                     parsed_items = _parse_g2b_items(data, cat)
+                    fetched_here += len(parsed_items)
                     for item in parsed_items:
                         collected[(item["bid_no"], item["bid_ord"])] = item
                     if not parsed_items or page_no * num_of_rows >= total_count:
                         break
+                reported_total += total_here
+                if total_here > fetched_here and not stopped_by_quota:
+                    skipped_by_page_cap += total_here - fetched_here
 
         if not collected and last_api_error:
             err_code, err_msg = last_api_error
@@ -213,7 +240,15 @@ async def fetch_g2b_bids(
             if extra["region_limit"]:
                 item["region_limit"] = extra["region_limit"]
 
-    return list(collected.values()), len(windows), f"나라장터 {len(windows)}개 7일 윈도우({len(collected)}건) 수집 완료"
+    msg = f"나라장터 {len(windows)}개 7일 윈도우({len(collected)}건) 수집 완료"
+    if stopped_by_quota:
+        msg += f" — 일일 호출 한도 보호로 일부만 수집(조회된 총 {reported_total:,}건 중 {len(collected):,}건)"
+    elif skipped_by_page_cap > 0:
+        msg += (
+            f" — 페이지 상한({max_pages}쪽×{num_of_rows}건)으로 {skipped_by_page_cap:,}건 생략."
+            " 키워드로 좁히거나 설정의 g2b_max_pages를 늘리세요"
+        )
+    return list(collected.values()), len(windows), msg
 
 
 async def download_g2b_attachments(bid_no: str, bid_ord: str, existing_attachments: list[dict[str, Any]]) -> list[dict[str, Any]]:

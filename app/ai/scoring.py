@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from app.ai.llm_client import generate_json, is_simulation_active
@@ -11,6 +12,43 @@ from app.config import load_profile, load_prompt
 from app.db import get_conn
 
 logger = logging.getLogger(__name__)
+
+
+_NUM_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def _coerce_score(value: Any, default: float) -> int:
+    """LLM이 준 점수를 0~100 정수로 안전 변환한다. "85점", "85.5", null 등도 처리하고 실패 시 기본값."""
+    try:
+        if isinstance(value, bool):
+            raise ValueError
+        if isinstance(value, (int, float)):
+            num = float(value)
+        else:
+            m = _NUM_RE.search(str(value or ""))
+            if not m:
+                raise ValueError
+            num = float(m.group(0))
+        if num != num:  # NaN
+            raise ValueError
+    except (TypeError, ValueError):
+        num = float(default)
+    return int(round(max(0.0, min(100.0, num))))
+
+
+def _coerce_risks(value: Any, default: list[str]) -> list[str]:
+    """리스크 목록 정규화. 문자열 하나가 오면 글자 단위로 쪼개지지 않도록 한 항목으로 감싼다."""
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else list(default)
+    if isinstance(value, (list, tuple)):
+        items = [str(v).strip() for v in value if str(v).strip()]
+        return items or list(default)
+    return list(default)
+
+
+def _coerce_summary(value: Any, default: str) -> str:
+    text = str(value).strip() if value is not None else ""
+    return text or default
 
 
 def _recent_exclusion_feedback(limit: int = 8) -> list[dict[str, str]]:
@@ -156,10 +194,12 @@ async def score_bid(bid: dict[str, Any], profile: dict[str, Any] | None = None) 
         tier="fast",
         simulation_payload=heuristic,
     )
+    if not isinstance(res, dict):
+        return heuristic
     return {
-        "score": int(res.get("score", heuristic["score"])),
-        "summary": str(res.get("summary") or heuristic["summary"]),
-        "risks": list(res.get("risks") or heuristic["risks"]),
+        "score": _coerce_score(res.get("score"), heuristic["score"]),
+        "summary": _coerce_summary(res.get("summary"), heuristic["summary"]),
+        "risks": _coerce_risks(res.get("risks"), heuristic["risks"]),
     }
 
 
@@ -262,9 +302,10 @@ async def score_bids_batch(
             tier="fast",
             simulation_payload=fallback_chunk,
         )
+        raw_scores = res.get("scores") if isinstance(res, dict) else None
         scored_by_no = {
             str(item.get("bid_no", "")): item
-            for item in (res.get("scores") or [])
+            for item in (raw_scores if isinstance(raw_scores, list) else [])
             if isinstance(item, dict) and item.get("bid_no")
         }
         for b in chunk:
@@ -273,9 +314,9 @@ async def score_bids_batch(
             if match:
                 base = heuristics_map[bkey]
                 heuristics_map[bkey] = {
-                    "score": int(match.get("score", base["score"])),
-                    "summary": str(match.get("summary") or base["summary"]),
-                    "risks": list(match.get("risks") or base["risks"]),
+                    "score": _coerce_score(match.get("score"), base["score"]),
+                    "summary": _coerce_summary(match.get("summary"), base["summary"]),
+                    "risks": _coerce_risks(match.get("risks"), base["risks"]),
                 }
 
     return heuristics_map

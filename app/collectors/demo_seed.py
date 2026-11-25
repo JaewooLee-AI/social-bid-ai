@@ -11,6 +11,11 @@ from app.documents.hwpx_engine import create_sample_hwpx_template
 
 
 def build_demo_bids() -> list[dict[str, Any]]:
+    """샘플 공고 목록. 모든 항목에 is_demo=True를 붙여 실제 공고와 구분한다."""
+    return [{**item, "is_demo": True} for item in _demo_bid_items()]
+
+
+def _demo_bid_items() -> list[dict[str, Any]]:
     now = datetime.now()
 
     def dt_str(days_offset: int) -> str:

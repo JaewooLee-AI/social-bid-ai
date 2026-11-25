@@ -74,6 +74,19 @@ def increment_quota(source: str, calls: int = 1) -> None:
             )
 
 
+def remaining_quota(source: str) -> int:
+    """오늘 남은 공공 API 호출 가능 횟수(설정의 daily_limits 기준)."""
+    cfg = load_config()
+    limit = int(cfg["public_api"].get("daily_limits", {}).get(source, 1000))
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT call_count FROM api_quota_log WHERE date_str = ? AND source = ?",
+            (_today_str(), source),
+        ).fetchone()
+    used = int(row["call_count"]) if row else 0
+    return max(0, limit - used)
+
+
 def get_quota_statuses() -> list[dict[str, Any]]:
     cfg = load_config()
     limits = cfg["public_api"].get("daily_limits", {})

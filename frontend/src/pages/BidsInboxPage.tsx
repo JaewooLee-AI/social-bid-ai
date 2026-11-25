@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -39,6 +39,8 @@ export const BidsInboxPage: React.FC<BidsInboxPageProps> = ({ onOpenProposal, on
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  // await 이전 동기 잠금(같은 틱의 연타로 수집이 중복 실행되는 것을 차단)
+  const syncLockRef = useRef(false);
   const [deciding, setDeciding] = useState(false);
   const [lastSyncReports, setLastSyncReports] = useState<BidSyncSourceReport[]>([]);
 
@@ -85,6 +87,8 @@ export const BidsInboxPage: React.FC<BidsInboxPageProps> = ({ onOpenProposal, on
   const selectedBid = bids.find((b) => b.id === selectedId) || null;
 
   const handleSync = async () => {
+    if (syncLockRef.current) return;
+    syncLockRef.current = true;
     setSyncing(true);
     try {
       const res = await api.syncBids(7, searchQuery.trim());
@@ -94,11 +98,14 @@ export const BidsInboxPage: React.FC<BidsInboxPageProps> = ({ onOpenProposal, on
     } catch (e) {
       onNotify(`수집 오류: ${(e as Error).message}`);
     } finally {
+      syncLockRef.current = false;
       setSyncing(false);
     }
   };
 
   const handleSeedDemo = async () => {
+    if (syncLockRef.current) return;
+    syncLockRef.current = true;
     setSyncing(true);
     try {
       const res = await api.seedDemoBids();
@@ -108,6 +115,7 @@ export const BidsInboxPage: React.FC<BidsInboxPageProps> = ({ onOpenProposal, on
     } catch (e) {
       onNotify(`샘플 로드 오류: ${(e as Error).message}`);
     } finally {
+      syncLockRef.current = false;
       setSyncing(false);
     }
   };
@@ -225,10 +233,14 @@ export const BidsInboxPage: React.FC<BidsInboxPageProps> = ({ onOpenProposal, on
               <strong className="uppercase text-[#0F2942]">{r.source}</strong>
               <span
                 className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                  r.used_demo ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                  r.failed
+                    ? 'bg-rose-100 text-rose-800'
+                    : r.used_demo
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-emerald-100 text-emerald-800'
                 }`}
               >
-                {r.used_demo ? '샘플' : '실데이터'}
+                {r.failed ? '실패' : r.used_demo ? '샘플' : '실데이터'}
               </span>
               <span>{r.message || `${r.fetched_count}건`}</span>
             </span>
@@ -377,6 +389,11 @@ export const BidsInboxPage: React.FC<BidsInboxPageProps> = ({ onOpenProposal, on
                         <div className="max-w-[260px]">
                           <div className="text-xs font-bold text-slate-900 line-clamp-2">{b.title}</div>
                           <div className="flex flex-wrap gap-1 mt-1">
+                            {b.is_demo && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-[10px] font-bold text-amber-900 border border-amber-300">
+                                샘플 공고
+                              </span>
+                            )}
                             {b.privilege_label && (
                               <span className="px-1.5 py-0.5 rounded bg-teal-50 text-[10px] font-bold text-teal-800 border border-teal-200">
                                 {b.privilege_label}
@@ -423,6 +440,14 @@ export const BidsInboxPage: React.FC<BidsInboxPageProps> = ({ onOpenProposal, on
                     </span>
                     {statusBadge(selectedBid.status)}
                   </div>
+                  {selectedBid.is_demo && (
+                    <p
+                      role="note"
+                      className="mb-1.5 px-2 py-1 rounded bg-amber-50 border border-amber-300 text-[11px] font-semibold text-amber-900"
+                    >
+                      앱 내장 샘플 공고입니다. 실제 나라장터·지원사업 공고가 아니므로 입찰·제출 대상이 아닙니다.
+                    </p>
+                  )}
                   <h2 className="text-base font-bold text-slate-900 leading-snug">{selectedBid.title}</h2>
                   <p className="text-xs text-slate-500 mt-1">
                     {selectedBid.agency} · {selectedBid.contract_method} · 지역: {selectedBid.region_limit}

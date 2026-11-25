@@ -44,6 +44,12 @@ def _table_identity_map(doc: Any) -> dict[int, int]:
     return mapping
 
 
+def _is_table_cell_place(place: Any) -> bool:
+    """문단 위치가 표 셀 내부인지 판정한다. 파서와 패처가 반드시 같은 기준을 써야 p{idx} 슬롯이 일치한다."""
+    where = str(getattr(place, "where", "body") or "body")
+    return where == "cell" and getattr(place, "table", None) is not None
+
+
 def parse_hwpx_or_hwp(file_path: str | Path) -> ParsedDocument:
     """한컴오피스 없이 .hwpx 및 .hwp(5.0) 문서를 파싱해 본문·표·개요·입력 슬롯을 추출한다."""
     path = Path(file_path)
@@ -102,9 +108,8 @@ def parse_hwpx_or_hwp(file_path: str | Path) -> ParsedDocument:
         body_para_idx = 0
         for place in doc.text.iter_paragraphs():
             text = _clean_text(getattr(place.paragraph, "text", ""))
-            where = str(getattr(place, "where", "body") or "body")
 
-            if where == "cell" and getattr(place, "table", None) is not None:
+            if _is_table_cell_place(place):
                 tbl = place.table
                 t_idx = t_id_map.get(id(tbl))
                 if t_idx is None and hasattr(tbl, "element"):
@@ -172,6 +177,7 @@ def parse_hwpx_or_hwp(file_path: str | Path) -> ParsedDocument:
                                     current_text=text,
                                 )
                             )
+                # 빈 문단도 포함해 센다(패치 시 동일 기준으로 위치를 찾는다).
                 body_para_idx += 1
 
         # 표 텍스트도 full_text에 포함해 검색·분석 가능하게 구성
@@ -306,16 +312,16 @@ def patch_hwpx(
             if re.match(r"^p(\d+)$", k)
         }
         if body_slots:
+            # 파서(parse_hwpx_or_hwp)와 동일하게 빈 문단을 포함한 모든 본문 문단을 센다.
+            # (예전에는 텍스트 있는 문단만 세어, 앞에 빈 줄이 있으면 다음 문단을 덮어썼다.)
             body_idx = 0
             for place in doc.text.iter_paragraphs():
-                where = str(getattr(place, "where", "body") or "body")
-                if where != "cell":
-                    text = _clean_text(getattr(place.paragraph, "text", ""))
-                    if text:
-                        if body_idx in body_slots:
-                            place.paragraph.text = body_slots[body_idx]
-                            patched_slots.append(f"p{body_idx}")
-                        body_idx += 1
+                if _is_table_cell_place(place):
+                    continue
+                if body_idx in body_slots:
+                    place.paragraph.text = body_slots[body_idx]
+                    patched_slots.append(f"p{body_idx}")
+                body_idx += 1
 
         # 3. 만약 슬롯 매칭이 전혀 안 된 경우 (예: 지정 양식이 아닌데 패치 요청 시) 하단에 섹션 추가
         if not patched_slots and slot_updates:

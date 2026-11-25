@@ -46,6 +46,8 @@ class BidItem(BaseModel):
     region_limit: str = "전국"
     license_limit: str = ""
     is_sme_competing: bool = False
+    # 앱 내장 샘플(데모) 공고 여부. 실제 공고와 반드시 구분해 표시해야 한다.
+    is_demo: bool = False
     url: str = ""
     privilege_tier: str = "none"  # "private_1_quote" | "private_2_quotes" | "general_priority" | "none"
     privilege_label: str = ""
@@ -76,6 +78,8 @@ class BidSyncSourceReport(BaseModel):
     saved_count: int = 0
     chunks_requested: int = 0
     used_demo: bool = False
+    # 실제 API 수집 실패 여부(실패 시 샘플로 대체하지 않는다)
+    failed: bool = False
     message: str = ""
 
 

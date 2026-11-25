@@ -310,6 +310,8 @@ export interface BidItem {
   region_limit: string;
   license_limit: string;
   is_sme_competing: boolean;
+  /** 앱 내장 샘플(데모) 공고 — 실제 공고 아님 */
+  is_demo: boolean;
   url: string;
   privilege_tier: 'private_1_quote' | 'private_2_quotes' | 'general_priority' | 'none' | string;
   privilege_label: string;
@@ -333,6 +335,8 @@ export interface BidSyncSourceReport {
   saved_count: number;
   chunks_requested: number;
   used_demo: boolean;
+  /** 실제 API 수집 실패(샘플로 대체하지 않음) */
+  failed: boolean;
   message: string;
 }
 

@@ -1790,7 +1790,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNotify, onConfigUp
                           </div>
                           <div className="text-[10px] text-slate-600">
                             {usageReport.unpriced_calls > 0
-                              ? '위 단가표에 등록 후 재계산 필요'
+                              ? '최고 등록 단가로 보수 추정 중 · 단가표 등록 후 재계산 권장'
                               : '모든 호출 단가 매핑 완료'}
                           </div>
                         </div>
@@ -1889,7 +1889,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNotify, onConfigUp
                                     </td>
                                     <td className="px-2.5 py-1.5 text-right font-mono tabular-nums">
                                       {lg.pricing_missing ? (
-                                        <span className="text-amber-700 font-semibold">미등록</span>
+                                        <span
+                                          className="text-amber-700 font-semibold"
+                                          title="단가 미등록 모델: 최고 등록 단가로 보수 추정한 금액"
+                                        >
+                                          ≈{lg.cost_krw.toFixed(1)}원 (추정)
+                                        </span>
                                       ) : (
                                         `${lg.cost_krw.toFixed(1)}원`
                                       )}

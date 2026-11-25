@@ -35,6 +35,8 @@ class PublicApiConfig(BaseModel):
     bizinfo_endpoint_url: str = "https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do"
     bizinfo_hashtags: str = "사회적기업,ESG,돌봄,친환경,교육"
     daily_limits: dict[str, int] = Field(default_factory=lambda: {"g2b": 1000, "seis": 500, "bizinfo": 1000})
+    # 나라장터 7일 윈도우·분류별 최대 페이지 수(페이지당 100건). 초과분은 수집 결과 메시지에 생략 건수로 표시
+    g2b_max_pages: int = Field(default=10, ge=1, le=50)
 
 
 class AppConfig(BaseModel):

@@ -8,7 +8,8 @@ interface DashboardPageProps {
   summary: DashboardSummary | null;
   loading: boolean;
   onRefresh: () => void;
-  onSyncDemoBids: () => Promise<void>;
+  onSyncBids: () => Promise<void>;
+  syncing: boolean;
   onNavigate: (page: 'dashboard' | 'bids' | 'proposals' | 'bizplan' | 'settings', id?: number) => void;
 }
 
@@ -16,7 +17,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   summary,
   loading,
   onRefresh,
-  onSyncDemoBids,
+  onSyncBids,
+  syncing,
   onNavigate,
 }) => {
   const formatKRW = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
@@ -33,11 +35,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={onSyncDemoBids}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-[#0D9488] text-white hover:bg-teal-700"
+            disabled={syncing}
+            onClick={() => void onSyncBids()}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-[#0D9488] text-white hover:bg-teal-700 disabled:opacity-50"
           >
             <Radar className="w-3.5 h-3.5" />
-            맞춤 공고 수집 실행
+            {syncing ? '공고 수집 중...' : '맞춤 공고 수집 실행'}
           </button>
           <button
             type="button"

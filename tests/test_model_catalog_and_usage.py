@@ -307,7 +307,11 @@ def test_usage_tracking_thinking_tokens_and_recalculation(isolated_data_dir: Pat
     # 1.0M * 0.75 + (0.5M + 0.5M) * 3.75 = 4.50 USD
     assert abs(res_known["cost_usd"] - 4.50) < 1e-6
 
-    # 2. 단가 미등록 모델: 가짜 0.15/0.60으로 계산하지 않고 pricing_missing=True 기록
+    # 2. 단가 미등록 모델: 저렴한 가짜 단가나 0원이 아니라, 등록 단가 중 최고가로 보수 추정하고 pricing_missing=True
+    #    (0원으로 두면 월 예산 상한에 집계되지 않아 상한이 무력화된다)
+    from app.ai.model_catalog import get_fallback_pricing
+
+    fb_in, fb_out = get_fallback_pricing("gemini-9-experimental")
     res_unknown = record_token_usage(
         "gemini",
         "gemini-9-experimental",
@@ -317,7 +321,8 @@ def test_usage_tracking_thinking_tokens_and_recalculation(isolated_data_dir: Pat
         thinking_tokens=0,
     )
     assert res_unknown["pricing_missing"] is True
-    assert res_unknown["cost_usd"] == 0.0
+    assert abs(res_unknown["cost_usd"] - (fb_in + fb_out)) < 1e-6
+    assert res_unknown["cost_usd"] > 0.75 + 3.75  # 등록된 일반 모델보다 낮게 추정되지 않음
 
     # 3. API로 사용량 리포트 조회 -> 단가표 추가 등록 -> 재계산 실행
     token = "test-usage-token"

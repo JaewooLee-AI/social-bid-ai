@@ -24,7 +24,7 @@ from app.ai.llm_cache import (
     put_cached_ocr,
     text_hash,
 )
-from app.ai.model_catalog import get_model_capabilities, get_model_pricing
+from app.ai.model_catalog import get_fallback_pricing, get_model_capabilities, get_model_pricing
 from app.config import effective_embedding_space, is_simulation_config, load_config
 from app.db import get_conn
 from app.schemas.settings import (
@@ -63,13 +63,13 @@ def record_token_usage(
     rates = get_model_pricing(model, cfg)
     is_emb = "embedding" in (model or "").lower()
 
-    if rates is None:
-        in_rate = 0.0
-        out_rate = 0.0
+    if rates is None or (rates[0] == 0.0 and rates[1] == 0.0 and not is_emb):
+        # 단가 미등록: 0원으로 두면 월 예산 상한에 잡히지 않으므로 보수적 대체 단가로 추정 집계
+        in_rate, out_rate = get_fallback_pricing(model, cfg)
         pricing_missing = 1
     else:
         in_rate, out_rate = rates
-        pricing_missing = 1 if (in_rate == 0.0 and out_rate == 0.0 and not is_emb) else 0
+        pricing_missing = 0
 
     billable_output = int(output_tokens) + int(thinking_tokens)
     cost_usd = (int(input_tokens) / 1_000_000.0) * in_rate + (billable_output / 1_000_000.0) * out_rate
@@ -798,16 +798,16 @@ def recalculate_token_usage_costs() -> RecalculateUsageResponse:
             rates = get_model_pricing(mid, cfg)
             is_emb = "embedding" in mid.lower()
             if rates is None or (rates[0] == 0.0 and rates[1] == 0.0 and not is_emb):
-                new_usd = 0.0
-                new_krw = 0.0
+                # 단가 미등록: 기록 시와 동일하게 보수적 대체 단가로 추정
+                in_r, out_r = get_fallback_pricing(mid, cfg)
                 new_missing = 1
                 still_unpriced += 1
             else:
                 in_r, out_r = rates
-                billable_out = int(r["output_tokens"]) + int(r["thinking_tokens"])
-                new_usd = (int(r["input_tokens"]) / 1_000_000.0) * in_r + (billable_out / 1_000_000.0) * out_r
-                new_krw = new_usd * usd_to_krw
                 new_missing = 0
+            billable_out = int(r["output_tokens"]) + int(r["thinking_tokens"])
+            new_usd = (int(r["input_tokens"]) / 1_000_000.0) * in_r + (billable_out / 1_000_000.0) * out_r
+            new_krw = new_usd * usd_to_krw
 
             total_krw += new_krw
             if (
@@ -823,7 +823,7 @@ def recalculate_token_usage_costs() -> RecalculateUsageResponse:
 
     msg = f"총 {updated_rows}건의 사용량 비용을 현재 단가·환율 기준으로 재계산했습니다."
     if still_unpriced > 0:
-        msg += f" (단가 미등록 {still_unpriced}건 유지)"
+        msg += f" (단가 미등록 {still_unpriced}건은 최고 등록 단가로 보수 추정)"
     return RecalculateUsageResponse(
         ok=True,
         updated_rows=updated_rows,

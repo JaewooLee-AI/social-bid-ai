@@ -115,6 +115,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "bizinfo_endpoint_url": "https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do",
         "bizinfo_hashtags": "사회적기업,ESG,돌봄,친환경,교육",
         "daily_limits": {"g2b": 1000, "seis": 500, "bizinfo": 1000},
+        "g2b_max_pages": 10,
     },
     "remote_prompts_manifest_url": "",
 }

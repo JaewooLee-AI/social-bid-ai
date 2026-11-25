@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS bids (
     exclusion_note TEXT NOT NULL DEFAULT '',
     attachments_json TEXT NOT NULL DEFAULT '[]',
     rfp_analysis_json TEXT NOT NULL DEFAULT '{}',
+    is_demo INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE(source, bid_no, bid_ord)
@@ -289,6 +290,12 @@ def init_db() -> dict[str, bool]:
             conn.execute("ALTER TABLE token_usage ADD COLUMN thinking_tokens INTEGER NOT NULL DEFAULT 0")
         if "pricing_missing" not in cols:
             conn.execute("ALTER TABLE token_usage ADD COLUMN pricing_missing INTEGER NOT NULL DEFAULT 0")
+
+        # bids.is_demo 추가: 기존 DB의 샘플 공고는 첨부 URL이 demo:// 이므로 이를 기준으로 표시를 복원한다.
+        bid_cols = {row["name"] for row in conn.execute("PRAGMA table_info(bids)").fetchall()}
+        if "is_demo" not in bid_cols:
+            conn.execute("ALTER TABLE bids ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0")
+            conn.execute("UPDATE bids SET is_demo = 1 WHERE attachments_json LIKE '%demo://%'")
         vec_ok = bool(_VEC_SUPPORTED)
         if vec_ok:
             try:

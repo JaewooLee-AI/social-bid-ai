@@ -1179,6 +1179,26 @@ def get_model_pricing(model_id: str, cfg: dict[str, Any] | None = None) -> tuple
     return None
 
 
+def get_fallback_pricing(model_id: str, cfg: dict[str, Any] | None = None) -> tuple[float, float]:
+    """단가 미등록 모델용 보수적 대체 단가: 같은 종류(채팅/임베딩)의 등록 단가 중 최댓값.
+
+    단가를 모르는 모델의 Live 사용량을 0원으로 기록하면 월 예산 상한이 무력화되므로,
+    과소 집계보다 과대 집계 쪽을 택한다.
+    """
+    cfg = cfg or load_config()
+    is_emb = "embedding" in (model_id or "").lower()
+    rates: list[tuple[float, float]] = []
+    for mid, p in (cfg.get("llm", {}).get("pricing_per_1m") or {}).items():
+        if isinstance(p, dict) and (("embedding" in mid.lower()) == is_emb):
+            rates.append((float(p.get("input", 0.0) or 0.0), float(p.get("output", 0.0) or 0.0)))
+    for entry in BUILTIN_MODEL_CATALOG:
+        if entry.input_price_per_1m is not None and ((entry.category == "embedding") == is_emb):
+            rates.append((float(entry.input_price_per_1m), float(entry.output_price_per_1m or 0.0)))
+    if not rates:
+        return (0.20, 0.0) if is_emb else (3.0, 15.0)
+    return max(r[0] for r in rates), max(r[1] for r in rates)
+
+
 async def _fetch_first_valid_pricing(
     client: httpx.AsyncClient,
 ) -> tuple[list[dict[str, Any]], str, list[str]]:
