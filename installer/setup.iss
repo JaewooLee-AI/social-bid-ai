@@ -26,6 +26,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; WebView2 설치 시 불필요한 강제 재부팅 프롬프트 방지
 RestartIfNeededByRun=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
+; 설치 프로그램(setup.exe) 자체 아이콘
+SetupIconFile=..\assets\icon\app.ico
 
 [Languages]
 Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"

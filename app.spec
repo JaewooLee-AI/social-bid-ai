@@ -93,6 +93,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    # Windows 실행 파일·작업 표시줄·바로가기 아이콘 (16~256px 다중 해상도 .ico)
+    icon=str(ROOT / "assets" / "icon" / "app.ico"),
 )
 
 coll = COLLECT(
