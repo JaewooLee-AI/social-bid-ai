@@ -101,7 +101,17 @@
 | M7 | 수정 | `requirements.txt` 상한 추가(python-hwpx 7.x 등), 검증된 정확한 버전 `constraints.txt`, CI Python 3.13 + `-c constraints.txt`, `--smoke-check`에 google.genai·python-hwpx 7 API 확인, `app.spec`에 google.genai 수집, 동결 exe 스모크 테스트 단계 추가 |
 | M8 | 수정 | 기본 프로필 `is_sample` 표시(구버전 파일은 샘플 회사명·사업자번호일 때만 샘플로 간주). 대시보드·설정 경고, 공고 판정·모든 내보내기 결과에 경고. 샘플 유형을 "인증 사회적기업"으로 정정하고 예비+인증 체크 모순 시 경고 |
 
-회귀 테스트: `tests/test_high_findings.py` 10개(수정 전 코드에서 전부 실패), `tests/test_medium_findings.py` 21개(수정 전 코드에서 12개 실패, 나머지는 지역 비교 경계값 확인용). 전체 83개 통과.
+| L1 | 수정 | 설정·프로필: 데이터 폴더별 1회 시드 + 파일 (mtime, size) 기준 파싱 캐시, 항상 복사본 반환(기본값 오염 방지). 호출당 약 0.30ms → 0.08ms |
+| L2 | 수정 | 세션 토큰 조회를 하나의 진행 중 요청으로 공유(동시 호출마다 대기·부트스트랩 반복 제거, 개발 모드 첫 로딩 4회→1회), 빈 토큰은 캐시하지 않음, 개발 서버가 아니면 브리지 준비를 최대 8초 더 기다림, 403 시 토큰 재조회 후 1회 재시도 |
+| L3 | 수정 | Gemini 모델 목록 조회 시 API 키를 `x-goog-api-key` 헤더로 전송 |
+| L4 | 수정 | 공공 API 오류는 `resultCode`/`returnReasonCode` 값으로만 판별(본문 데이터의 `>22<` 오탐 제거) |
+| L5 | 수정 | 시나리오 A는 배점표 또는 "제안서 (작성) 목차" 명시 시에만. 공고의 제안서 쪽수 제한(예: A4 30쪽 이내)을 찾으면 쪽당 600자로 전체 분량 산정(없으면 6,500자) |
+| L6 | 수정 | `MarkdownPreview` 연속 글머리표를 `<ul>`로 묶음(번호 줄은 소제목으로 쓰이므로 문단 유지) |
+| L7 | 수정 | Actions를 커밋 SHA로 고정 + Dependabot(github-actions) 추가, WebView2 부트스트래퍼 Authenticode 서명·발급자(Microsoft) 확인, 코드 서명 단계 추가(`installer/sign.ps1`, Secrets `WINDOWS_CERT_PFX_BASE64`·`WINDOWS_CERT_PASSWORD` 등록 시에만 실행) |
+
+회귀 테스트: `tests/test_high_findings.py` 10개(수정 전 코드에서 전부 실패), `tests/test_medium_findings.py` 21개(수정 전 코드에서 12개 실패, 나머지는 지역 비교 경계값 확인용), `tests/test_low_findings.py` 7개(수정 전 코드에서 5개 실패, 나머지 2개는 유지돼야 할 동작 확인). 전체 90개 통과. L2·L6은 브라우저에서 확인(L2: 부트스트랩 요청 1회·403 없음, L6: `<ul>` 3항목·고립 `<li>` 0개).
+
+코드 서명은 인증서가 있어야 하므로 Secrets를 등록하기 전까지는 서명 단계를 건너뛰고, setup.exe는 여전히 SmartScreen 경고가 뜹니다.
 
 참고: 이 Mac의 Anaconda Python에는 python-hwpx 6.11이 설치되어 있어 앱이 동작하지 않습니다(`HwpxDocument.save` 없음). 프로젝트 `.venv`(7.0.0)를 사용하세요. M7의 버전 상·하한이 이 상황을 설치 단계에서 막습니다.
 

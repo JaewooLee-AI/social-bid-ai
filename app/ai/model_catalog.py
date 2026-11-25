@@ -897,9 +897,11 @@ async def fetch_live_gemini_models(
         return [], None
 
     try:
+        # API 키는 URL 쿼리(?key=)가 아닌 헤더로 전송: URL은 프록시·로그·예외 메시지에 남을 수 있음
         resp = await client.get(
             GEMINI_MODELS_API_URL,
-            params={"key": key, "pageSize": "100"},
+            params={"pageSize": "100"},
+            headers={"x-goog-api-key": key},
             timeout=15.0,
         )
     except httpx.RequestError as exc:

@@ -1,4 +1,4 @@
-import { resolveSessionToken } from './bridge';
+import { invalidateSessionToken, resolveSessionToken } from './bridge';
 import type {
   ApiStatusResponse,
   AppConfig,
@@ -45,7 +45,15 @@ async function apiFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
   const headers = await authHeaders(
     isFormData ? {} : { 'Content-Type': 'application/json', ...(init.headers as Record<string, string> | undefined) }
   );
-  const resp = await fetch(url, { ...init, headers });
+  let resp = await fetch(url, { ...init, headers });
+  if (resp.status === 403) {
+    // 토큰이 늦게 준비됐거나 바뀐 경우 한 번만 다시 조회해 재시도(문자열·FormData 본문은 재전송 가능)
+    invalidateSessionToken();
+    const retryHeaders = await authHeaders(
+      isFormData ? {} : { 'Content-Type': 'application/json', ...(init.headers as Record<string, string> | undefined) }
+    );
+    resp = await fetch(url, { ...init, headers: retryHeaders });
+  }
   if (!resp.ok) {
     let msg = `요청 실패 (${resp.status})`;
     try {

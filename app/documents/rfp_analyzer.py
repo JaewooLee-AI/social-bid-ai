@@ -69,9 +69,38 @@ def detect_scenario(doc: ParsedDocument, scoring: list[ScoringCriterion]) -> str
     """시나리오 A(RFP 목차/배점표 명시), B(목차 없음/수의계약), C(지정 HWPX 양식 슬롯)를 판별한다."""
     if doc.is_template_form or len(doc.slots) >= 2:
         return "C"
-    if scoring or "제안서 작성 목차" in doc.full_text or "목차" in doc.full_text:
+    # 예전엔 '목차' 한 단어만 있어도 A로 판정(RFP 문서 자체의 목차에도 걸림). 배점표가 없으면 A 목차를 만들 수 없으므로
+    # 배점표가 있거나 제안서 작성 목차를 명시적으로 지시한 경우만 A로 본다.
+    if scoring or _PROPOSAL_TOC_RE.search(doc.full_text):
         return "A"
     return "B"
+
+
+_PROPOSAL_TOC_RE = re.compile(r"제안서\s*(?:작성\s*)?목차|목차\s*(?:구성|순서)(?:에\s*따라|를\s*준수)|작성\s*목차")
+_PAGE_LIMIT_RE = re.compile(
+    r"제안서[^\n]{0,60}?(?:A4\s*)?(?:용지\s*)?(\d{1,3})\s*(?:페이지|쪽|매|page)\s*(?:이내|이하|내외|以內)"
+    r"|(?:A4\s*)(?:용지\s*)?(\d{1,3})\s*(?:페이지|쪽|매)\s*(?:이내|이하)"
+)
+# A4 1쪽당 본문 글자 수(표·그림·여백을 감안한 보수적 추정)
+_CHARS_PER_PAGE = 600
+DEFAULT_TOTAL_CHARS = 6500
+
+
+def extract_page_limit(text: str) -> int | None:
+    """공고문에서 제안서 분량 제한(쪽수)을 찾는다. 예: '제안서는 A4 30쪽 이내'."""
+    for m in _PAGE_LIMIT_RE.finditer(str(text or "")):
+        pages = int(m.group(1) or m.group(2))
+        if 1 <= pages <= 300:
+            return pages
+    return None
+
+
+def total_chars_budget_for(doc: ParsedDocument) -> int:
+    """제안서 전체 목표 분량. 쪽수 제한이 있으면 그에 맞추고, 없으면 기본 6,500자."""
+    pages = extract_page_limit(doc.full_text)
+    if not pages:
+        return DEFAULT_TOTAL_CHARS
+    return max(2000, min(60000, pages * _CHARS_PER_PAGE))
 
 
 def build_outline_from_document(
@@ -103,11 +132,12 @@ def build_outline_from_document(
     # 시나리오 A: 배점표 비례 분량 배분
     if scenario == "A" and scoring:
         total_weight = sum(s.max_score for s in scoring) or 100.0
-        total_chars_budget = 6500
+        total_chars_budget = total_chars_budget_for(doc)
+        per_section_cap = max(2800, int(total_chars_budget * 0.5))
         nodes = []
         for idx, s in enumerate(scoring, start=1):
             ratio = s.max_score / total_weight
-            target_chars = max(500, min(2800, int(round(total_chars_budget * ratio / 50.0) * 50)))
+            target_chars = max(500, min(per_section_cap, int(round(total_chars_budget * ratio / 50.0) * 50)))
             clean_title = re.sub(r"^\d+[\.\)]\s*", "", s.item).strip()
             nodes.append(
                 OutlineNode(

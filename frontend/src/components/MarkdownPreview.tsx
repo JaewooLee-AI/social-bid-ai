@@ -1,5 +1,7 @@
 import React from 'react';
 
+const BULLET_RE = /^[-*•]\s+/;
+
 interface MarkdownPreviewProps {
   content: string;
 }
@@ -118,12 +120,25 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content }) => 
           {renderInline(line.slice(2))}
         </blockquote>
       );
-    } else if (line.startsWith('- ') || line.startsWith('* ')) {
+    } else if (BULLET_RE.test(line)) {
+      // 연속된 글머리표 줄을 하나의 <ul>로 묶는다(예전: 부모 없는 <li>라 스크린리더가 목록으로 읽지 못함).
+      // "1. 제목" 같은 번호 줄은 본문 소제목으로도 쓰이므로 기존처럼 문단으로 둔다.
+      const startIdx = i;
+      const items: string[] = [];
+      while (i < lines.length && BULLET_RE.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(BULLET_RE, ''));
+        i += 1;
+      }
       blocks.push(
-        <li key={`li-${i}`} className="ml-5 list-disc text-sm text-slate-800 leading-relaxed my-1">
-          {renderInline(line.slice(2))}
-        </li>
+        <ul key={`ul-${startIdx}`} className="ml-5 my-1 list-disc text-sm text-slate-800 leading-relaxed">
+          {items.map((item, li) => (
+            <li key={li} className="my-1">
+              {renderInline(item)}
+            </li>
+          ))}
+        </ul>
       );
+      continue;
     } else {
       blocks.push(
         <p key={`p-${i}`} className="text-sm text-slate-800 leading-relaxed my-2">

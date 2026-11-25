@@ -23,85 +23,94 @@ declare global {
 }
 
 let cachedToken = '';
+// 동시에 여러 API가 호출돼도 토큰 조회는 한 번만 진행(예전: 호출마다 450ms 대기 경쟁)
+let inflight: Promise<string> | null = null;
 
 export function isPyWebviewEnv(): boolean {
   return typeof window !== 'undefined' && Boolean(window.pywebview?.api);
 }
 
-export async function resolveSessionToken(): Promise<string> {
-  if (cachedToken) return cachedToken;
+/** 403(토큰 불일치) 후 다시 조회하도록 캐시를 비운다. */
+export function invalidateSessionToken(): void {
+  cachedToken = '';
+}
 
-  if (typeof window !== 'undefined') {
-    if (window.pywebview?.token) {
-      cachedToken = window.pywebview.token;
-      return cachedToken;
-    }
-
-    if (window.pywebview?.api?.get_runtime_info) {
-      try {
-        const info = await window.pywebview.api.get_runtime_info();
-        if (info?.token) {
-          cachedToken = info.token;
-          return cachedToken;
-        }
-      } catch {
-        // fallback below
-      }
-    }
-
-    // pywebviewready 이벤트 최대 600ms 대기 후 dev-bootstrap 확인
-    await new Promise<void>((resolve) => {
-      let done = false;
-      const timer = window.setTimeout(() => {
-        if (!done) {
-          done = true;
-          resolve();
-        }
-      }, 450);
-      window.addEventListener(
-        'pywebviewready',
-        () => {
-          if (!done) {
-            done = true;
-            window.clearTimeout(timer);
-            resolve();
-          }
-        },
-        { once: true }
-      );
-    });
-
-    if (window.pywebview?.token) {
-      cachedToken = window.pywebview.token;
-      return cachedToken;
-    }
-    if (window.pywebview?.api?.get_runtime_info) {
-      try {
-        const info = await window.pywebview.api.get_runtime_info();
-        if (info?.token) {
-          cachedToken = info.token;
-          return cachedToken;
-        }
-      } catch {
-        // ignore
-      }
+async function tokenFromPyWebview(): Promise<string> {
+  if (window.pywebview?.token) return window.pywebview.token;
+  if (window.pywebview?.api?.get_runtime_info) {
+    try {
+      const info = await window.pywebview.api.get_runtime_info();
+      if (info?.token) return info.token;
+    } catch {
+      // ignore
     }
   }
+  return '';
+}
 
-  // 개발 모드(--dev-server) 부트스트랩
+function waitForPyWebviewReady(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (window.pywebview?.api) {
+      resolve();
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (!done) {
+        done = true;
+        window.clearTimeout(timer);
+        window.removeEventListener('pywebviewready', finish);
+        resolve();
+      }
+    };
+    const timer = window.setTimeout(finish, ms);
+    window.addEventListener('pywebviewready', finish, { once: true });
+  });
+}
+
+async function devBootstrapToken(): Promise<string> {
   try {
     const resp = await fetch('/api/dev-bootstrap');
     if (resp.ok) {
       const data = await resp.json();
-      if (data?.token) {
-        cachedToken = String(data.token);
-        return cachedToken;
-      }
+      if (data?.token) return String(data.token);
     }
   } catch {
     // ignore
   }
-  return cachedToken;
+  return '';
+}
+
+async function lookupToken(): Promise<string> {
+  if (typeof window === 'undefined') return '';
+
+  let token = await tokenFromPyWebview();
+  if (token) return token;
+
+  // 짧게 pywebviewready를 기다린 뒤 개발 서버(--dev-server) 부트스트랩 확인
+  await waitForPyWebviewReady(450);
+  token = (await tokenFromPyWebview()) || (await devBootstrapToken());
+  if (token) return token;
+
+  // 개발 서버가 아니면 데스크톱 앱인데 브리지 준비가 늦은 경우: 빈 토큰으로 403을 받는 대신 더 기다린다
+  await waitForPyWebviewReady(8000);
+  return await tokenFromPyWebview();
+}
+
+export async function resolveSessionToken(): Promise<string> {
+  if (cachedToken) return cachedToken;
+  if (!inflight) {
+    inflight = lookupToken()
+      .then((token) => {
+        // 빈 결과는 캐시하지 않아 다음 호출에서 다시 시도
+        if (token) cachedToken = token;
+        return token;
+      })
+      .finally(() => {
+        inflight = null;
+      });
+  }
+  return inflight;
 }
 
 export async function nativeOpenFile(mode: 'document' | 'hwpx' | 'rag' = 'document') {

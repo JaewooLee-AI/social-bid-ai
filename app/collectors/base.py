@@ -244,6 +244,21 @@ def get_last_synced_at(source: str) -> datetime | None:
         return None
 
 
+_ERROR_CODE_RES = (
+    re.compile(r"<(?:returnReasonCode|resultCode)>\s*(\d+)\s*</(?:returnReasonCode|resultCode)>"),
+    re.compile(r'"(?:returnReasonCode|resultCode)"\s*:\s*"?(\d+)"?'),
+)
+
+
+def _public_api_error_code(text: str) -> str:
+    """응답의 resultCode/returnReasonCode 값만 본다. 예전 '>22<' 부분 문자열 검사는 본문 데이터(예: <bidNtceOrd>22<)에도 걸렸다."""
+    for pattern in _ERROR_CODE_RES:
+        m = pattern.search(text)
+        if m:
+            return m.group(1).lstrip("0") or "0"
+    return ""
+
+
 async def request_with_backoff(
     client: httpx.AsyncClient,
     url: str,
@@ -260,15 +275,12 @@ async def request_with_backoff(
             )
         increment_quota(source, 1)
         resp = await client.get(url, params=params)
-        text_lower = resp.text[:400]
+        head = resp.text[:2000]
+        code = _public_api_error_code(head)
         # 공공데이터포털 OpenAPI 오류 코드 판별
-        if "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS" in text_lower or ">22<" in text_lower:
+        if "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS" in head or code == "22":
             raise RuntimeError(f"[{source}] 공공 API 일일 호출 한도 초과 (코드 22)")
-        if (
-            resp.status_code == 429
-            or "LIMITED_NUMBER_OF_SERVICE_REQUESTS_PER_SECOND_EXCEEDS" in text_lower
-            or ">23<" in text_lower
-        ):
+        if resp.status_code == 429 or "LIMITED_NUMBER_OF_SERVICE_REQUESTS_PER_SECOND_EXCEEDS" in head or code == "23":
             if attempt == max_retries - 1:
                 raise RuntimeError(f"[{source}] 초당 호출 한도 초과 (코드 23)")
             await asyncio.sleep(delay)

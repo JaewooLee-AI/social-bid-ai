@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import shutil
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -221,6 +223,45 @@ def seed_defaults() -> None:
     get_exports_dir()
 
 
+# load_config/load_profile은 요청 하나에서도 수십 번 호출된다. 예전엔 매번 seed_defaults()(파일 존재 확인·
+# 프롬프트 폴더 glob)와 JSON 파싱을 했으므로, 데이터 폴더별 1회 시드 + 파일 (mtime, size) 기준 파싱 캐시를 둔다.
+_CACHE_LOCK = threading.Lock()
+_SEEDED_DIRS: set[str] = set()
+_JSON_CACHE: dict[str, tuple[tuple[int, int], dict[str, Any]]] = {}
+
+
+def _ensure_seeded() -> None:
+    key = str(get_data_dir())
+    if key in _SEEDED_DIRS and get_config_path().exists() and get_profile_path().exists():
+        return
+    seed_defaults()
+    with _CACHE_LOCK:
+        _SEEDED_DIRS.add(key)
+
+
+def _load_merged_json(path: Path, defaults: dict[str, Any], fixup: Any = None) -> dict[str, Any]:
+    """기본값과 병합한 JSON을 반환. 파일이 바뀌지 않았으면 캐시 사용. 호출자가 수정해도 되도록 항상 복사본."""
+    st = path.stat()
+    stamp = (st.st_mtime_ns, st.st_size)
+    key = str(path)
+    with _CACHE_LOCK:
+        hit = _JSON_CACHE.get(key)
+    if hit and hit[0] == stamp:
+        return copy.deepcopy(hit[1])
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if fixup:
+        fixup(raw)
+    merged = _deep_merge(copy.deepcopy(defaults), raw)
+    with _CACHE_LOCK:
+        _JSON_CACHE[key] = (stamp, merged)
+    return copy.deepcopy(merged)
+
+
+def _invalidate_json_cache(path: Path) -> None:
+    with _CACHE_LOCK:
+        _JSON_CACHE.pop(str(path), None)
+
+
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     out = dict(base)
     for k, v in override.items():
@@ -256,38 +297,41 @@ def effective_embedding_space(cfg: dict[str, Any] | None = None) -> tuple[str, i
 
 
 def load_config() -> dict[str, Any]:
-    seed_defaults()
-    raw = json.loads(get_config_path().read_text(encoding="utf-8"))
-    return _deep_merge(DEFAULT_CONFIG, raw)
+    _ensure_seeded()
+    return _load_merged_json(get_config_path(), DEFAULT_CONFIG)
 
 
 def save_config(cfg: dict[str, Any]) -> dict[str, Any]:
-    seed_defaults()
-    merged = _deep_merge(DEFAULT_CONFIG, cfg)
+    _ensure_seeded()
+    merged = _deep_merge(copy.deepcopy(DEFAULT_CONFIG), cfg)
     atomic_write_json(get_config_path(), merged)
+    _invalidate_json_cache(get_config_path())  # 같은 크기·같은 mtime 해상도 내 재저장 대비
     return merged
 
 
-def load_profile() -> dict[str, Any]:
-    seed_defaults()
-    raw = json.loads(get_profile_path().read_text(encoding="utf-8"))
+def _profile_fixup(raw: dict[str, Any]) -> None:
     if "is_sample" not in raw:
         # 구버전 프로필 파일: 샘플 회사의 이름·사업자번호를 그대로 쓰는 경우에만 샘플로 간주
         raw["is_sample"] = (
             raw.get("name") == DEFAULT_PROFILE["name"] and raw.get("biz_reg_no") == DEFAULT_PROFILE["biz_reg_no"]
         )
-    return _deep_merge(DEFAULT_PROFILE, raw)
+
+
+def load_profile() -> dict[str, Any]:
+    _ensure_seeded()
+    return _load_merged_json(get_profile_path(), DEFAULT_PROFILE, _profile_fixup)
 
 
 def save_profile(profile: dict[str, Any]) -> dict[str, Any]:
-    seed_defaults()
-    merged = _deep_merge(DEFAULT_PROFILE, profile)
+    _ensure_seeded()
+    merged = _deep_merge(copy.deepcopy(DEFAULT_PROFILE), profile)
     atomic_write_json(get_profile_path(), merged)
+    _invalidate_json_cache(get_profile_path())
     return merged
 
 
 def load_svi_rubric() -> dict[str, Any]:
-    seed_defaults()
+    _ensure_seeded()
     path = get_svi_rubric_path()
     if not path.exists():
         path = get_resource_dir() / "defaults" / "svi_rubric.json"
@@ -296,7 +340,7 @@ def load_svi_rubric() -> dict[str, Any]:
 
 def load_prompt(name: str) -> dict[str, Any]:
     """프롬프트 YAML을 데이터 디렉터리에서 우선 로드한다."""
-    seed_defaults()
+    _ensure_seeded()
     fname = name if name.endswith(".yaml") else f"{name}.yaml"
     path = get_prompts_dir() / fname
     if not path.exists():
